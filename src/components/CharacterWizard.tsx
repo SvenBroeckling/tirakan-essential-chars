@@ -2,11 +2,11 @@
 
 import {
   ActionIcon,
+  Autocomplete,
   Button,
   Container,
   Group,
   Modal,
-  NumberInput,
   Paper,
   Select,
   SimpleGrid,
@@ -19,9 +19,13 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { AttributeRow, attributeValues } from "@/components/AttributeRows";
+import { armorRules, ArmorRule, weaponRules, WeaponRule } from "@/lib/equipmentRules";
+import { ancestryRules, bondRules, MarkRule, pathRules } from "@/lib/markRules";
 import {
   ancestries,
   attributes,
+  AttributeName,
   bonds,
   CharacterPayload,
   centuryLevels,
@@ -31,7 +35,88 @@ import {
   wizardSteps,
 } from "@/lib/rulebook";
 
-type ChoiceField = "ancestry" | "path" | "bond";
+type ChoiceField = "ancestry" | "path" | "bond" | "primaryWeapon" | "secondaryWeapon" | "armor";
+
+const attributeTargets: Record<0 | 1 | 2 | 3, number> = {
+  0: 2,
+  1: 3,
+  2: 2,
+  3: 1,
+};
+
+const attributeTargetLabels: Record<0 | 1 | 2 | 3, string> = {
+  0: "Zwei Attribute auf 0",
+  1: "Drei Attribute auf 1",
+  2: "Zwei Attribute auf 2",
+  3: "Ein Attribut auf 3",
+};
+
+const attributeRuleOrder = [3, 2, 1, 0] as const;
+const validAttributeValues = [3, 2, 2, 1, 1, 1, 0, 0] as const;
+
+const startingSkillRanks = [1, 1, 1, 1, 1, 1, 1, 1, 1];
+const validSkillRanks = [3, 2, 2, 2, 1, 1, 1, 1, 1] as const;
+const skillRankValues = [1, 2, 3] as const;
+const skillRuleOrder = [3, 2, 1] as const;
+const skillTargetLabels: Record<1 | 2 | 3, string> = {
+  1: "Alle übrigen Fertigkeiten auf Rang 1",
+  2: "Drei Fertigkeiten auf Rang 2",
+  3: "Eine Fertigkeit auf Rang 3",
+};
+
+const randomNames = ["Arel von Bayard", "Mara Schattenhain", "Joran Aschpfad", "Selka Rotmund"];
+const randomConcepts = [
+  "Ein ehemaliger Soldat, der einen alten Eid nicht loswird.",
+  "Eine Kräuterkundige mit Wissen über verbotene Rituale.",
+  "Ein abtrünniger Inquisitor auf der Suche nach Vergebung.",
+  "Eine fahrende Händlerin mit Schulden bei den falschen Leuten.",
+];
+const tirakanMonths = [
+  "Schneemond",
+  "Festmond",
+  "Frühlingsmond",
+  "Hagelmond",
+  "Lebensmond",
+  "Sommermond",
+  "Obstmond",
+  "Haumond",
+  "Herbstmond",
+  "Weinmond",
+  "Nebelmond",
+  "Wintermond",
+] as const;
+const randomOaths = [
+  "Ich schulde einem alten Lehrmeister ein Leben.",
+  "Ich habe geschworen, eine verlorene Familie wiederzufinden.",
+  "Ich darf den Namen eines Toten nicht vergessen.",
+  "Ich habe eine Schuld gegenüber meiner letzten Gemeinschaft.",
+];
+const randomItems = [
+  ["Seil", "Zunderkasten", "Wasserschlauch"],
+  ["Laterne", "Kreide", "Decke"],
+  ["Haken", "Verbände", "Trockenfleisch"],
+];
+const randomSupernatural = [
+  { focus: "Geschwärzter Ring", regenerationRitual: "Stille Wache vor Morgengrauen", aspects: ["Schatten", "Blut"], spells: ["Zeichen lesen", "Schutzkreis"] },
+  { focus: "Knochenamulett", regenerationRitual: "Asche und Salz erneuern", aspects: ["Asche", "Eid"], spells: ["Flüstern bannen", "Wunde schließen"] },
+  { focus: "Alte Münze", regenerationRitual: "Namen der Toten murmeln", aspects: ["Erinnerung", "Nebel"], spells: ["Omen deuten", "Blick verhüllen"] },
+];
+
+function pathSkillOptions(pathName: string) {
+  const skills = pathRules.find((rule) => rule.name === pathName)?.skills;
+  if (!skills) return [];
+
+  return Array.from(new Set(skills.split(",").map((skill) => skill.trim()).filter(Boolean)));
+}
+
+function startingSkillsForPath(pathName: string) {
+  const options = pathSkillOptions(pathName);
+
+  return startingSkillRanks.map((rank, index) => ({
+    name: options[index] ?? "",
+    rank,
+  }));
+}
 
 const emptyPayload: CharacterPayload = {
   name: "",
@@ -48,22 +133,14 @@ const emptyPayload: CharacterPayload = {
   bondCustom: false,
   oathOrDebt: "",
   attributes: initialAttributes(),
-  skills: [
-    { name: "", rank: 3 },
-    { name: "", rank: 2 },
-    { name: "", rank: 2 },
-    { name: "", rank: 2 },
-    { name: "", rank: 1 },
-    { name: "", rank: 1 },
-    { name: "", rank: 1 },
-    { name: "", rank: 1 },
-    { name: "", rank: 1 },
-  ],
+  skills: startingSkillsForPath(paths[0]),
   equipment: {
     primaryWeapon: "",
     secondaryWeapon: "",
     armor: "",
     items: ["", "", ""],
+    customWeapons: {},
+    customArmors: {},
   },
   supernatural: {
     focus: "",
@@ -78,6 +155,47 @@ function setNested<T>(value: T, update: Partial<T>): T {
   return { ...value, ...update };
 }
 
+function shuffled<T>(values: readonly T[]) {
+  const copy = [...values];
+
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+  }
+
+  return copy;
+}
+
+function randomItem<T>(values: readonly T[]) {
+  return values[Math.floor(Math.random() * values.length)];
+}
+
+function validateAttributes(selected: Record<AttributeName, number>) {
+  const counts = attributeValues.reduce(
+    (acc, value) => ({ ...acc, [value]: attributes.filter((attribute) => selected[attribute] === value).length }),
+    {} as Record<0 | 1 | 2 | 3, number>,
+  );
+
+  const valid = attributeValues.every((value) => counts[value] === attributeTargets[value]);
+  return { counts, valid };
+}
+
+function validateSkills(skills: CharacterPayload["skills"]) {
+  const targets: Record<1 | 2 | 3, number> = {
+    1: Math.max(skills.length - 4, 0),
+    2: 3,
+    3: 1,
+  };
+  const counts = skillRankValues.reduce(
+    (acc, value) => ({ ...acc, [value]: skills.filter((skill) => skill.rank === value).length }),
+    {} as Record<1 | 2 | 3, number>,
+  );
+  const validRanks = skills.every((skill) => skillRankValues.includes(skill.rank as 1 | 2 | 3));
+  const valid = validRanks && skillRankValues.every((value) => counts[value] === targets[value]);
+
+  return { counts, targets, valid };
+}
+
 export function CharacterWizard() {
   const router = useRouter();
   const [active, setActive] = useState(0);
@@ -86,21 +204,156 @@ export function CharacterWizard() {
   const [payload, setPayload] = useState<CharacterPayload>(emptyPayload);
   const [customField, setCustomField] = useState<ChoiceField>("ancestry");
   const [customValue, setCustomValue] = useState("");
+  const [customWeapon, setCustomWeapon] = useState({ damage: "", range: "", grip: "", properties: "" });
+  const [customArmor, setCustomArmor] = useState({ protection: "", load: "", sealing: "", properties: "" });
+  const [attributeAttempted, setAttributeAttempted] = useState(false);
+  const [skillAttempted, setSkillAttempted] = useState(false);
   const [opened, modal] = useDisclosure(false);
   const derived = useMemo(() => deriveValues(payload), [payload]);
+  const attributeValidation = useMemo(() => validateAttributes(payload.attributes), [payload.attributes]);
+  const skillValidation = useMemo(() => validateSkills(payload.skills), [payload.skills]);
+  const selectedAncestryRule = useMemo(
+    () => ancestryRules.find((rule) => rule.name === payload.ancestry),
+    [payload.ancestry],
+  );
+  const selectedPathRule = useMemo(() => pathRules.find((rule) => rule.name === payload.path), [payload.path]);
+  const selectedBondRule = useMemo(() => bondRules.find((rule) => rule.name === payload.bond), [payload.bond]);
+  const selectedPathSkillOptions = useMemo(() => pathSkillOptions(payload.path), [payload.path]);
+  const selectedPrimaryWeaponRule = useMemo(
+    () =>
+      weaponRules.find((rule) => rule.name === payload.equipment.primaryWeapon) ??
+      payload.equipment.customWeapons?.[payload.equipment.primaryWeapon],
+    [payload.equipment.customWeapons, payload.equipment.primaryWeapon],
+  );
+  const selectedSecondaryWeaponRule = useMemo(
+    () =>
+      weaponRules.find((rule) => rule.name === payload.equipment.secondaryWeapon) ??
+      payload.equipment.customWeapons?.[payload.equipment.secondaryWeapon],
+    [payload.equipment.customWeapons, payload.equipment.secondaryWeapon],
+  );
+  const selectedArmorRule = useMemo(
+    () =>
+      armorRules.find((rule) => rule.name === payload.equipment.armor) ??
+      payload.equipment.customArmors?.[payload.equipment.armor],
+    [payload.equipment.armor, payload.equipment.customArmors],
+  );
+  const weaponOptions = useMemo(() => weaponRules.map((rule) => rule.name), []);
+  const armorOptions = useMemo(() => armorRules.map((rule) => rule.name), []);
   const levels = centuryLevels[payload.century];
 
   const setField = <K extends keyof CharacterPayload>(key: K, value: CharacterPayload[K]) => {
     setPayload((current) => ({ ...current, [key]: value }));
   };
 
+  const randomizeAttributes = () => {
+    const values = shuffled(validAttributeValues);
+    setField(
+      "attributes",
+      attributes.reduce(
+        (next, attribute, index) => ({ ...next, [attribute]: values[index] }),
+        {} as CharacterPayload["attributes"],
+      ),
+    );
+    setAttributeAttempted(false);
+  };
+
+  const randomizeSkills = () => {
+    const ranks = shuffled(validSkillRanks);
+    setField(
+      "skills",
+      payload.skills.map((skill, index) => ({ ...skill, rank: ranks[index] ?? 1 })),
+    );
+    setSkillAttempted(false);
+  };
+
+  const randomizeCurrentStep = () => {
+    if (active === 0) {
+      const century = Math.floor(Math.random() * 10) + 1;
+      const year = (century - 1) * 100 + Math.floor(Math.random() * 100) + 1;
+      const month = Math.floor(Math.random() * 12) + 1;
+      const day = Math.floor(Math.random() * 28) + 1;
+      setPayload((current) => ({
+        ...current,
+        name: randomItem(randomNames),
+        concept: randomItem(randomConcepts),
+        century,
+        birthDate: `${day}. ${tirakanMonths[month - 1]} ${year}`,
+      }));
+      return;
+    }
+
+    if (active === 1) {
+      randomizeAttributes();
+      return;
+    }
+
+    if (active === 2) {
+      const path = randomItem(paths);
+      setPayload((current) => ({
+        ...current,
+        ancestry: randomItem(ancestries),
+        ancestryCustom: false,
+        path,
+        pathCustom: false,
+        bond: randomItem(bonds),
+        bondCustom: false,
+        skills: startingSkillsForPath(path),
+      }));
+      return;
+    }
+
+    if (active === 3) {
+      randomizeSkills();
+      return;
+    }
+
+    if (active === 4) {
+      setField("oathOrDebt", randomItem(randomOaths));
+      return;
+    }
+
+    if (active === 5) {
+      setField("equipment", {
+        primaryWeapon: randomItem(weaponRules).name,
+        secondaryWeapon: randomItem(weaponRules).name,
+        armor: randomItem(armorRules).name,
+        items: randomItem(randomItems),
+      });
+      return;
+    }
+
+    if (active === 6) {
+      setField("supernatural", randomItem(randomSupernatural));
+    }
+  };
+
   const goToStep = (step: number) => {
+    if (active === 1 && step > active && !attributeValidation.valid) {
+      setAttributeAttempted(true);
+      return;
+    }
+
+    if (active === 3 && step > active && !skillValidation.valid) {
+      setSkillAttempted(true);
+      return;
+    }
+
     if (step <= maxReached) {
       setActive(step);
     }
   };
 
   const nextStep = () => {
+    if (active === 1 && !attributeValidation.valid) {
+      setAttributeAttempted(true);
+      return;
+    }
+
+    if (active === 3 && !skillValidation.valid) {
+      setSkillAttempted(true);
+      return;
+    }
+
     setActive((step) => {
       const next = Math.min(step + 1, wizardSteps.length - 1);
       setMaxReached((reached) => Math.max(reached, next));
@@ -111,15 +364,55 @@ export function CharacterWizard() {
   const openCustom = (field: ChoiceField) => {
     setCustomField(field);
     setCustomValue("");
+    setCustomWeapon({ damage: "", range: "", grip: "", properties: "" });
+    setCustomArmor({ protection: "", load: "", sealing: "", properties: "" });
     modal.open();
   };
 
   const applyCustom = () => {
     if (!customValue.trim()) return;
+    const nextValue = customValue.trim();
     setPayload((current) => ({
       ...current,
-      [customField]: customValue.trim(),
+      [customField]: nextValue,
       [`${customField}Custom`]: true,
+      ...(customField === "path" ? { skills: startingSkillsForPath(nextValue) } : {}),
+      ...(customField === "primaryWeapon"
+        ? {
+            equipment: {
+              ...current.equipment,
+              primaryWeapon: nextValue,
+              customWeapons: {
+                ...(current.equipment.customWeapons ?? {}),
+                [nextValue]: { name: nextValue, ...customWeapon },
+              },
+            },
+          }
+        : {}),
+      ...(customField === "secondaryWeapon"
+        ? {
+            equipment: {
+              ...current.equipment,
+              secondaryWeapon: nextValue,
+              customWeapons: {
+                ...(current.equipment.customWeapons ?? {}),
+                [nextValue]: { name: nextValue, ...customWeapon },
+              },
+            },
+          }
+        : {}),
+      ...(customField === "armor"
+        ? {
+            equipment: {
+              ...current.equipment,
+              armor: nextValue,
+              customArmors: {
+                ...(current.equipment.customArmors ?? {}),
+                [nextValue]: { name: nextValue, ...customArmor },
+              },
+            },
+          }
+        : {}),
     }));
     modal.close();
   };
@@ -183,10 +476,41 @@ export function CharacterWizard() {
           </Paper>
 
           <Paper className="book-panel" p="xl">
-            <Group className="sheet-section-header" justify="space-between" mb="md">
-              <Title order={2} size="h3" className="display-font">
-                Schritt {active + 1}: {wizardSteps[active]}
-              </Title>
+            <Group className="sheet-section-header" justify="space-between" align="start" mb="md">
+              <Stack gap={4}>
+                <Title order={2} size="h3" className="display-font">
+                  Schritt {active + 1}: {wizardSteps[active]}
+                </Title>
+                {active === 1 && (
+                  <DistributionRules
+                    rules={attributeRuleOrder.map((value) => ({
+                      label: attributeTargetLabels[value],
+                      valid: attributeValidation.counts[value] === attributeTargets[value],
+                    }))}
+                    error={
+                      attributeAttempted && !attributeValidation.valid
+                        ? "Wähle genau ein Attribut auf 3, zwei auf 2, drei auf 1 und zwei auf 0."
+                        : undefined
+                    }
+                  />
+                )}
+                {active === 3 && (
+                  <DistributionRules
+                    rules={skillRuleOrder.map((value) => ({
+                      label: skillTargetLabels[value],
+                      valid: skillValidation.counts[value] === skillValidation.targets[value],
+                    }))}
+                    error={
+                      skillAttempted && !skillValidation.valid
+                        ? "Wähle genau eine Fertigkeit auf Rang 3, drei auf Rang 2 und alle übrigen auf Rang 1."
+                        : undefined
+                    }
+                  />
+                )}
+              </Stack>
+              <Button variant="default" size="compact-sm" onClick={randomizeCurrentStep}>
+                Zufällig
+              </Button>
             </Group>
 
             {active === 0 && (
@@ -229,81 +553,90 @@ export function CharacterWizard() {
             )}
 
             {active === 1 && (
-              <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }}>
-                {attributes.map((attribute) => (
-                  <NumberInput
-                    key={attribute}
-                    label={attribute}
-                    min={0}
-                    max={3}
-                    value={payload.attributes[attribute]}
-                    onChange={(value) =>
-                      setField("attributes", { ...payload.attributes, [attribute]: Number(value) || 0 })
-                    }
-                  />
-                ))}
-              </SimpleGrid>
+              <Stack gap="md">
+                <SimpleGrid cols={{ base: 1, md: 2 }}>
+                  {attributes.map((attribute) => (
+                    <AttributeRow
+                      key={attribute}
+                      attribute={attribute}
+                      value={payload.attributes[attribute]}
+                      onChange={(value) =>
+                        setField("attributes", { ...payload.attributes, [attribute]: value })
+                      }
+                    />
+                  ))}
+                </SimpleGrid>
+              </Stack>
             )}
 
             {active === 2 && (
-              <Stack>
-                <Text size="sm" c="dimmed">
-                  Verteile eine Fertigkeit auf Rang 3, drei auf Rang 2 und fünf auf Rang 1.
-                </Text>
-                {payload.skills.map((skill, index) => (
-                  <Group key={index} grow align="end">
-                    <TextInput
-                      label={`Fertigkeit ${index + 1}`}
-                      value={skill.name}
-                      onChange={(event) => {
-                        const skills = [...payload.skills];
-                        skills[index] = { ...skill, name: event.currentTarget.value };
-                        setField("skills", skills);
-                      }}
-                    />
-                    <NumberInput
-                      label="Rang"
-                      min={0}
-                      max={4}
-                      value={skill.rank}
-                      onChange={(value) => {
-                        const skills = [...payload.skills];
-                        skills[index] = { ...skill, rank: Number(value) || 0 };
-                        setField("skills", skills);
-                      }}
-                    />
-                  </Group>
-                ))}
+              <Stack gap="md">
+                <SimpleGrid cols={{ base: 1, md: 3 }}>
+                  <ChoiceSelect
+                    label="Abstammung"
+                    value={payload.ancestry}
+                    data={ancestries}
+                    custom={payload.ancestryCustom}
+                    onChange={(value) => setPayload((current) => ({ ...current, ancestry: value, ancestryCustom: false }))}
+                    onCustom={() => openCustom("ancestry")}
+                  />
+                  <ChoiceSelect
+                    label="Weg"
+                    value={payload.path}
+                    data={paths}
+                    custom={payload.pathCustom}
+                    onChange={(value) =>
+                      setPayload((current) => ({
+                        ...current,
+                        path: value,
+                        pathCustom: false,
+                        skills: startingSkillsForPath(value),
+                      }))
+                    }
+                    onCustom={() => openCustom("path")}
+                  />
+                  <ChoiceSelect
+                    label="Bindung"
+                    value={payload.bond}
+                    data={bonds}
+                    custom={payload.bondCustom}
+                    onChange={(value) => setPayload((current) => ({ ...current, bond: value, bondCustom: false }))}
+                    onCustom={() => openCustom("bond")}
+                  />
+                </SimpleGrid>
+                <SimpleGrid cols={{ base: 1, md: 3 }}>
+                  <MarkRuleCard title="Abstammung" name={payload.ancestry} rule={selectedAncestryRule} />
+                  <MarkRuleCard title="Weg" name={payload.path} rule={selectedPathRule} showFacet />
+                  <MarkRuleCard title="Bindung" name={payload.bond} rule={selectedBondRule} />
+                </SimpleGrid>
               </Stack>
             )}
 
             {active === 3 && (
-              <SimpleGrid cols={{ base: 1, md: 3 }}>
-                <ChoiceSelect
-                  label="Abstammung"
-                  value={payload.ancestry}
-                  data={ancestries}
-                  custom={payload.ancestryCustom}
-                  onChange={(value) => setPayload((current) => ({ ...current, ancestry: value, ancestryCustom: false }))}
-                  onCustom={() => openCustom("ancestry")}
-                />
-                <ChoiceSelect
-                  label="Weg"
-                  value={payload.path}
-                  data={paths}
-                  custom={payload.pathCustom}
-                  onChange={(value) => setPayload((current) => ({ ...current, path: value, pathCustom: false }))}
-                  onCustom={() => openCustom("path")}
-                />
-                <ChoiceSelect
-                  label="Bindung"
-                  value={payload.bond}
-                  data={bonds}
-                  custom={payload.bondCustom}
-                  onChange={(value) => setPayload((current) => ({ ...current, bond: value, bondCustom: false }))}
-                  onCustom={() => openCustom("bond")}
-                />
-              </SimpleGrid>
+              <Stack gap="md">
+                {payload.skills.map((skill, index) => (
+                  <div key={index} className="skill-row">
+                    <Autocomplete
+                      label={`Fertigkeit ${index + 1}`}
+                      data={selectedPathSkillOptions}
+                      value={skill.name}
+                      onChange={(value) => {
+                        const skills = [...payload.skills];
+                        skills[index] = { ...skill, name: value };
+                        setField("skills", skills);
+                      }}
+                    />
+                    <SkillRankSelector
+                      value={skill.rank}
+                      onChange={(rank) => {
+                        const skills = [...payload.skills];
+                        skills[index] = { ...skill, rank };
+                        setField("skills", skills);
+                      }}
+                    />
+                  </div>
+                ))}
+              </Stack>
             )}
 
             {active === 4 && (
@@ -317,80 +650,87 @@ export function CharacterWizard() {
             )}
 
             {active === 5 && (
-              <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }}>
-                {Object.entries(derived).map(([key, value]) => (
-                  <Paper key={key} className="stat-card" withBorder p="md" radius={6}>
-                    <Text size="sm" c="dimmed">
-                      {key}
+              <SimpleGrid cols={{ base: 1, md: 2 }}>
+                <Stack gap="xs">
+                  <EquipmentSelect
+                    label="Primärwaffe"
+                    data={weaponOptions}
+                    value={payload.equipment.primaryWeapon}
+                    onChange={(value) =>
+                      setField("equipment", setNested(payload.equipment, { primaryWeapon: value }))
+                    }
+                    onCustom={() => openCustom("primaryWeapon")}
+                  />
+                  <WeaponRuleSummary rule={selectedPrimaryWeaponRule} />
+                </Stack>
+                <Stack gap="xs">
+                  <EquipmentSelect
+                    label="Zweitwaffe"
+                    data={weaponOptions}
+                    value={payload.equipment.secondaryWeapon}
+                    onChange={(value) =>
+                      setField("equipment", setNested(payload.equipment, { secondaryWeapon: value }))
+                    }
+                    onCustom={() => openCustom("secondaryWeapon")}
+                  />
+                  <WeaponRuleSummary rule={selectedSecondaryWeaponRule} />
+                </Stack>
+                <Stack gap="xs">
+                  <EquipmentSelect
+                    label="Rüstung"
+                    data={armorOptions}
+                    value={payload.equipment.armor}
+                    onChange={(value) => setField("equipment", setNested(payload.equipment, { armor: value }))}
+                    onCustom={() => openCustom("armor")}
+                  />
+                  <ArmorRuleSummary rule={selectedArmorRule} />
+                </Stack>
+                <Stack gap="xs" className="equipment-items">
+                  <Group justify="space-between" align="end">
+                    <Text size="sm" fw={700} c="var(--ink)">
+                      Gebrauchsgegenstände
                     </Text>
-                    <Text fz="xl" fw={700}>
-                      {value}
-                    </Text>
-                  </Paper>
-                ))}
+                    <Button
+                      variant="default"
+                      size="compact-sm"
+                      onClick={() =>
+                        setField("equipment", setNested(payload.equipment, { items: [...payload.equipment.items, ""] }))
+                      }
+                    >
+                      Hinzufügen
+                    </Button>
+                  </Group>
+                  {payload.equipment.items.map((item, index) => (
+                    <Group key={index} align="end" gap="xs" wrap="nowrap">
+                      <TextInput
+                        label={`Gegenstand ${index + 1}`}
+                        value={item}
+                        onChange={(e) => {
+                          const items = [...payload.equipment.items];
+                          items[index] = e.currentTarget.value;
+                          setField("equipment", setNested(payload.equipment, { items }));
+                        }}
+                        style={{ flex: 1 }}
+                      />
+                      <ActionIcon
+                        aria-label={`Gegenstand ${index + 1} entfernen`}
+                        variant="default"
+                        size={36}
+                        disabled={payload.equipment.items.length === 1}
+                        onClick={() => {
+                          const items = payload.equipment.items.filter((_, itemIndex) => itemIndex !== index);
+                          setField("equipment", setNested(payload.equipment, { items }));
+                        }}
+                      >
+                        -
+                      </ActionIcon>
+                    </Group>
+                  ))}
+                </Stack>
               </SimpleGrid>
             )}
 
             {active === 6 && (
-              <SimpleGrid cols={{ base: 1, md: 2 }}>
-                <TextInput
-                  label="Primärwaffe"
-                  value={payload.equipment.primaryWeapon}
-                  onChange={(e) =>
-                    setField("equipment", setNested(payload.equipment, { primaryWeapon: e.currentTarget.value }))
-                  }
-                />
-                <TextInput
-                  label="Zweitwaffe"
-                  value={payload.equipment.secondaryWeapon}
-                  onChange={(e) =>
-                    setField("equipment", setNested(payload.equipment, { secondaryWeapon: e.currentTarget.value }))
-                  }
-                />
-                <TextInput
-                  label="Rüstung"
-                  value={payload.equipment.armor}
-                  onChange={(e) => setField("equipment", setNested(payload.equipment, { armor: e.currentTarget.value }))}
-                />
-                {payload.equipment.items.map((item, index) => (
-                  <TextInput
-                    key={index}
-                    label={`Gebrauchsgegenstand ${index + 1}`}
-                    value={item}
-                    onChange={(e) => {
-                      const items = [...payload.equipment.items];
-                      items[index] = e.currentTarget.value;
-                      setField("equipment", setNested(payload.equipment, { items }));
-                    }}
-                  />
-                ))}
-              </SimpleGrid>
-            )}
-
-            {active === 7 && (
-              <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
-                <Paper className="stat-card" withBorder p="md" radius={6}>
-                  <Text>Wunden 0 / {derived.woundThreshold}</Text>
-                </Paper>
-                <Paper className="stat-card" withBorder p="md" radius={6}>
-                  <Text>Bürde 0 / {derived.burdenThreshold}</Text>
-                </Paper>
-                <Paper className="stat-card" withBorder p="md" radius={6}>
-                  <Text>Omen {derived.omenMax}</Text>
-                </Paper>
-                <Paper className="stat-card" withBorder p="md" radius={6}>
-                  <Text>Arkana {derived.arkanaMax}</Text>
-                </Paper>
-                <Paper className="stat-card" withBorder p="md" radius={6}>
-                  <Text>Gunst {derived.favorMax}</Text>
-                </Paper>
-                <Paper className="stat-card" withBorder p="md" radius={6}>
-                  <Text>Verderbnis 0, Mal keins</Text>
-                </Paper>
-              </SimpleGrid>
-            )}
-
-            {active === 8 && (
               <Stack>
                 <SimpleGrid cols={{ base: 1, md: 2 }}>
                   <TextInput
@@ -448,15 +788,244 @@ export function CharacterWizard() {
         </Stack>
       </Container>
 
-      <Modal opened={opened} onClose={modal.close} title="Eigene Prägung">
+      <Modal opened={opened} onClose={modal.close} title={equipmentCustomField(customField) ? "Eigene Ausrüstung" : "Eigene Prägung"}>
         <Stack>
-          <TextInput label="Eigener Wert" value={customValue} onChange={(e) => setCustomValue(e.currentTarget.value)} />
+          <TextInput label="Name" value={customValue} onChange={(e) => setCustomValue(e.currentTarget.value)} />
+          {weaponCustomField(customField) && (
+            <SimpleGrid cols={{ base: 1, sm: 2 }}>
+              <TextInput
+                label="Schaden"
+                value={customWeapon.damage}
+                onChange={(e) => setCustomWeapon({ ...customWeapon, damage: e.currentTarget.value })}
+              />
+              <TextInput
+                label="Reichweite"
+                value={customWeapon.range}
+                onChange={(e) => setCustomWeapon({ ...customWeapon, range: e.currentTarget.value })}
+              />
+              <TextInput
+                label="Griff"
+                value={customWeapon.grip}
+                onChange={(e) => setCustomWeapon({ ...customWeapon, grip: e.currentTarget.value })}
+              />
+              <TextInput
+                label="Eigenschaften"
+                value={customWeapon.properties}
+                onChange={(e) => setCustomWeapon({ ...customWeapon, properties: e.currentTarget.value })}
+              />
+            </SimpleGrid>
+          )}
+          {customField === "armor" && (
+            <SimpleGrid cols={{ base: 1, sm: 2 }}>
+              <TextInput
+                label="Schutz"
+                value={customArmor.protection}
+                onChange={(e) => setCustomArmor({ ...customArmor, protection: e.currentTarget.value })}
+              />
+              <TextInput
+                label="Last"
+                value={customArmor.load}
+                onChange={(e) => setCustomArmor({ ...customArmor, load: e.currentTarget.value })}
+              />
+              <TextInput
+                label="Versiegelung"
+                value={customArmor.sealing}
+                onChange={(e) => setCustomArmor({ ...customArmor, sealing: e.currentTarget.value })}
+              />
+              <TextInput
+                label="Eigenschaften"
+                value={customArmor.properties}
+                onChange={(e) => setCustomArmor({ ...customArmor, properties: e.currentTarget.value })}
+              />
+            </SimpleGrid>
+          )}
           <Button color="red.9" onClick={applyCustom}>
             Übernehmen
           </Button>
         </Stack>
       </Modal>
     </main>
+  );
+}
+
+function weaponCustomField(field: ChoiceField) {
+  return field === "primaryWeapon" || field === "secondaryWeapon";
+}
+
+function equipmentCustomField(field: ChoiceField) {
+  return weaponCustomField(field) || field === "armor";
+}
+
+function MarkRuleCard({
+  title,
+  name,
+  rule,
+  showFacet,
+}: {
+  title: string;
+  name: string;
+  rule?: MarkRule;
+  showFacet?: boolean;
+}) {
+  return (
+    <Paper className="mark-rule-card" withBorder p="md" radius={6}>
+      <Stack gap="xs">
+        <div>
+          <Text size="xs" tt="uppercase" c="dimmed" fw={700}>
+            {title}
+          </Text>
+          <Text fw={700}>{name}</Text>
+        </div>
+        {rule ? (
+          <>
+            <RuleLine label="Vorteil" value={rule.benefit} />
+            <RuleLine label="Verwundbarkeit" value={rule.vulnerability} />
+            {showFacet && <RuleLine label="Wegfacette" value={rule.facet} />}
+            <RuleLine label="Fertigkeiten" value={rule.skills} />
+          </>
+        ) : <></>}
+      </Stack>
+    </Paper>
+  );
+}
+
+function DistributionRules({
+  rules,
+  error,
+}: {
+  rules: Array<{ label: string; valid: boolean }>;
+  error?: string;
+}) {
+  return (
+    <Stack gap={3} className="distribution-rules">
+      <Group gap="xs">
+        {rules.map((rule) => (
+          <Text key={rule.label} size="xs" data-valid={rule.valid}>
+            {rule.label}
+          </Text>
+        ))}
+      </Group>
+      {error && (
+        <Text size="xs" className="distribution-error">
+          {error}
+        </Text>
+      )}
+    </Stack>
+  );
+}
+
+function WeaponRuleSummary({ rule }: { rule?: WeaponRule }) {
+  if (!rule) {
+    return <></>;
+  }
+
+  return (
+    <Paper className="equipment-rule-card" withBorder p="sm" radius={6}>
+      <SimpleGrid cols={2}>
+        <ReadRule label="Schaden" value={rule.damage} />
+        <ReadRule label="Reichweite" value={rule.range} />
+        <ReadRule label="Griff" value={rule.grip} />
+        <ReadRule label="Eigenschaften" value={rule.properties} />
+      </SimpleGrid>
+    </Paper>
+  );
+}
+
+function ArmorRuleSummary({ rule }: { rule?: ArmorRule }) {
+  if (!rule) {
+    return <></>;
+  }
+
+  return (
+    <Paper className="equipment-rule-card" withBorder p="sm" radius={6}>
+      <SimpleGrid cols={2}>
+        <ReadRule label="Schutz" value={rule.protection} />
+        <ReadRule label="Last" value={rule.load} />
+        <ReadRule label="Versiegelung" value={rule.sealing} />
+        <ReadRule label="Eigenschaften" value={rule.properties} />
+      </SimpleGrid>
+    </Paper>
+  );
+}
+
+function ReadRule({ label, value }: { label: string; value: string }) {
+  return (
+    <Stack gap={1}>
+      <Text size="xs" tt="uppercase" c="dimmed" fw={700}>
+        {label}
+      </Text>
+      <Text size="sm">{value}</Text>
+    </Stack>
+  );
+}
+
+function RuleLine({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+
+  return (
+    <Text size="sm">
+      <Text span fw={700}>
+        {label}:{" "}
+      </Text>
+      {value}
+    </Text>
+  );
+}
+
+function SkillRankSelector({ value, onChange }: { value: number; onChange: (rank: number) => void }) {
+  return (
+    <Stack gap={4}>
+      <Text size="xs" tt="uppercase" c="dimmed" fw={700}>
+        Rang
+      </Text>
+      <Group gap={6} wrap="nowrap" className="attribute-circles">
+        {skillRankValues.map((rank) => (
+          <button
+            key={rank}
+            type="button"
+            className="attribute-circle"
+            data-selected={value === rank}
+            onClick={() => onChange(rank)}
+            aria-pressed={value === rank}
+            aria-label={`Fertigkeit auf Rang ${rank} setzen`}
+          >
+            {rank}
+          </button>
+        ))}
+      </Group>
+    </Stack>
+  );
+}
+
+function EquipmentSelect({
+  label,
+  value,
+  data,
+  onChange,
+  onCustom,
+}: {
+  label: string;
+  value: string;
+  data: string[];
+  onChange: (value: string) => void;
+  onCustom: () => void;
+}) {
+  const options = value && !data.includes(value) ? [value, ...data] : data;
+
+  return (
+    <Group align="end" gap="xs" wrap="nowrap">
+      <Select
+        label={label}
+        data={options}
+        value={value || null}
+        searchable
+        onChange={(next) => next && onChange(next)}
+        style={{ flex: 1 }}
+      />
+      <ActionIcon aria-label={`${label} selbst eingeben`} variant="default" size={36} onClick={onCustom}>
+        +
+      </ActionIcon>
+    </Group>
   );
 }
 

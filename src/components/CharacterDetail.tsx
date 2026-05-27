@@ -16,6 +16,7 @@ import {
 } from "@mantine/core";
 import Link from "next/link";
 import { useState } from "react";
+import { AttributeRow } from "@/components/AttributeRows";
 import { attributes, deriveValues } from "@/lib/rulebook";
 
 type CharacterView = {
@@ -226,23 +227,19 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
 
           <Paper className="book-panel" p="lg">
             <SectionTitle title="Attribute" onEdit={() => setEditing("attributes")} />
-            <SimpleGrid cols={{ base: 2, sm: 4 }}>
-              {attributes.map((attribute) =>
-                editing === "attributes" ? (
-                  <NumberInput
-                    key={attribute}
-                    label={attribute}
-                    min={0}
-                    max={3}
-                    value={draft.attributes[attribute] ?? 0}
-                    onChange={(value) =>
-                      setDraft({ ...draft, attributes: { ...draft.attributes, [attribute]: Number(value) || 0 } })
-                    }
-                  />
-                ) : (
-                  <Read key={attribute} label={attribute} value={String(draft.attributes[attribute] ?? 0)} />
-                ),
-              )}
+            <SimpleGrid cols={{ base: 1, md: 2 }}>
+              {attributes.map((attribute) => (
+                <AttributeRow
+                  key={attribute}
+                  attribute={attribute}
+                  value={draft.attributes[attribute] ?? 0}
+                  onChange={
+                    editing === "attributes"
+                      ? (value) => setDraft({ ...draft, attributes: { ...draft.attributes, [attribute]: value } })
+                      : undefined
+                  }
+                />
+              ))}
             </SimpleGrid>
           </Paper>
 

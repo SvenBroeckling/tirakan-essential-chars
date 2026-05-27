@@ -29,6 +29,8 @@ function normalizePayload(body: Partial<CharacterPayload>): CharacterPayload {
       secondaryWeapon: body.equipment?.secondaryWeapon?.trim() ?? "",
       armor: body.equipment?.armor?.trim() ?? "",
       items: body.equipment?.items?.filter(Boolean) ?? [],
+      customWeapons: body.equipment?.customWeapons ?? {},
+      customArmors: body.equipment?.customArmors ?? {},
     },
     supernatural: {
       focus: body.supernatural?.focus?.trim() ?? "",

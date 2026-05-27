@@ -148,14 +148,28 @@ export const bonds = [
 export const wizardSteps = [
   "Konzept",
   "Attribute",
-  "Fertigkeiten",
   "Prägungen",
+  "Fertigkeiten",
   "Schuld oder Eid",
-  "Abgeleitete Werte",
   "Startausrüstung",
-  "Startwerte",
   "Übernatürlicher Zugang",
 ];
+
+export type CustomWeaponRule = {
+  name: string;
+  damage: string;
+  range: string;
+  grip: string;
+  properties: string;
+};
+
+export type CustomArmorRule = {
+  name: string;
+  protection: string;
+  load: string;
+  sealing: string;
+  properties: string;
+};
 
 export type CharacterPayload = {
   name: string;
@@ -178,6 +192,8 @@ export type CharacterPayload = {
     secondaryWeapon: string;
     armor: string;
     items: string[];
+    customWeapons?: Record<string, CustomWeaponRule>;
+    customArmors?: Record<string, CustomArmorRule>;
   };
   supernatural: {
     focus: string;
