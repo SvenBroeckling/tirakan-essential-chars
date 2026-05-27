@@ -1,8 +1,9 @@
 import "@mantine/core/styles.css";
 import "./globals.css";
 
-import { ColorSchemeScript, MantineProvider, createTheme, mantineHtmlProps } from "@mantine/core";
+import { ColorSchemeScript, MantineProvider, createTheme, mantineHtmlProps, Container, Text, Center } from "@mantine/core";
 import type { Metadata } from "next";
+import packageJson from "../../package.json";
 
 export const metadata: Metadata = {
   title: "Tirakan Charaktere",
@@ -41,7 +42,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <MantineProvider defaultColorScheme="light" theme={theme}>
-          {children}
+          <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+            <div style={{ flex: 1 }}>
+              {children}
+            </div>
+            <footer style={{ backgroundColor: '#000' }}>
+              <Container size="lg" py="md">
+                <Center>
+                  <Text size="xs" c="gray.6">
+                    Tirakan Essential Chars v{packageJson.version}
+                  </Text>
+                </Center>
+              </Container>
+            </footer>
+          </div>
         </MantineProvider>
       </body>
     </html>

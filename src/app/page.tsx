@@ -1,6 +1,25 @@
-import { Button, Container, Group, Stack, Text, Title } from "@mantine/core";
+import { Button, Container, Group, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { HashLookup } from "@/components/HashLookup";
+
+const releaseUrl = "https://github.com/SvenBroeckling/tirakan-essential/releases/latest";
+const downloads = [
+  {
+    title: "Regelbuch",
+    file: "tirakans-reiche-essential.pdf",
+    href: "https://github.com/SvenBroeckling/tirakan-essential/releases/latest/download/tirakans-reiche-essential.pdf",
+  },
+  {
+    title: "Charakterbogen",
+    file: "sheet.pdf",
+    href: "https://github.com/SvenBroeckling/tirakan-essential/releases/latest/download/sheet.pdf",
+  },
+  {
+    title: "NSC Bogen",
+    file: "npc_sheet.pdf",
+    href: "https://github.com/SvenBroeckling/tirakan-essential/releases/latest/download/npc_sheet.pdf",
+  },
+];
 
 export default function Home() {
   return (
@@ -24,6 +43,18 @@ export default function Home() {
                 </Button>
               </Group>
               <HashLookup />
+              <Stack gap="xs" className="release-downloads">
+                <Group justify="space-between" gap="xs">
+                  <Text className="download-kicker">Downloads</Text>
+                </Group>
+                <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs">
+                  {downloads.map((download) => (
+                    <a key={download.file} className="download-link" href={download.href}>
+                      <Text fw={700}>{download.title}</Text>
+                    </a>
+                  ))}
+                </SimpleGrid>
+              </Stack>
             </Stack>
           </Stack>
         </Container>
