@@ -9,16 +9,19 @@ import {
   Paper,
   SimpleGrid,
   Stack,
+  Switch,
   Text,
   TextInput,
   Textarea,
   Title,
 } from "@mantine/core";
 import Link from "next/link";
-import { useState } from "react";
-import { AttributeRow, sheetRankValues, SkillRankRow } from "@/components/AttributeRows";
+import { ReactNode, useState } from "react";
+import { AttributeRow, attributeTargetRolls, sheetRankValues, SkillRankRow } from "@/components/AttributeRows";
 import { armorRules, ArmorRule, weaponRules, WeaponRule } from "@/lib/equipmentRules";
-import { attributes, deriveValues, normalizeAttributes } from "@/lib/rulebook";
+import { magicAspectRules, SpellRule, spellRules } from "@/lib/magicRules";
+import { ancestryRules, bondRules, MarkRule, pathRules } from "@/lib/markRules";
+import { attributeLabels, attributes, centuryLevels, deriveValues, normalizeAttributes } from "@/lib/rulebook";
 
 type CharacterView = {
   hash: string;
@@ -70,6 +73,7 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
   const [draft, setDraft] = useState({ ...character, attributes: normalizeAttributes(character.attributes) });
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   const primaryWeapon =
     weaponRules.find((rule) => rule.name === draft.equipment.primaryWeapon) ??
     draft.equipment.customWeapons?.[draft.equipment.primaryWeapon];
@@ -78,6 +82,15 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
     draft.equipment.customWeapons?.[draft.equipment.secondaryWeapon];
   const armor =
     armorRules.find((rule) => rule.name === draft.equipment.armor) ?? draft.equipment.customArmors?.[draft.equipment.armor];
+  const ancestryRule = ancestryRules.find((rule) => rule.name === draft.ancestry);
+  const pathRule = pathRules.find((rule) => rule.name === draft.path);
+  const bondRule = bondRules.find((rule) => rule.name === draft.bond);
+  const aspectRules = draft.supernatural.aspects
+    .map((aspect) => magicAspectRules.find((rule) => rule.name === aspect))
+    .filter((rule): rule is (typeof magicAspectRules)[number] => Boolean(rule));
+  const selectedSpellRules = draft.supernatural.spells
+    .map((spell) => spellRules.find((rule) => rule.name === spell))
+    .filter((rule): rule is SpellRule => Boolean(rule));
   const derived = deriveValues({
     attributes: draft.attributes as never,
     century: draft.century,
@@ -123,6 +136,11 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
               </Group>
             </Stack>
             <Group>
+              <Switch
+                label="Beschreibungen und Regeln"
+                checked={showRules}
+                onChange={(event) => setShowRules(event.currentTarget.checked)}
+              />
               <Button component={Link} href="/characters/new" variant="default">
                 Neu
               </Button>
@@ -193,6 +211,13 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                   <Read label="Weg" value={draft.path} custom={draft.pathCustom} />
                   <Read label="Bindung" value={draft.bond} custom={draft.bondCustom} />
                   <Read label="Mal" value={draft.mark} />
+                  {showRules && (
+                    <Stack gap="xs">
+                      <MarkRuleSummary title="Abstammung" name={draft.ancestry} rule={ancestryRule} />
+                      <MarkRuleSummary title="Weg" name={draft.path} rule={pathRule} showFacet />
+                      <MarkRuleSummary title="Bindung" name={draft.bond} rule={bondRule} />
+                    </Stack>
+                  )}
                 </Stack>
               )}
             </Paper>
@@ -222,6 +247,15 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                   <Read label="Verderbnis" value={String(draft.conditions.corruption ?? 0)} />
                 </SimpleGrid>
               )}
+              {showRules && (
+                <RuleHelp>
+                  <RuleLine label="Wunden" value={`Maximum = 3 + ${attributeLabels.body}`} />
+                  <RuleLine label="Bürde" value={`Maximum = 5 + abgerundete Hälfte von ${attributeLabels.will}`} />
+                  <RuleLine label="Omen" value="Maximum = 2 + abgerundete Hälfte des Glaubensniveaus" />
+                  <RuleLine label="Arkana" value={`Maximum = 3 + ${attributeLabels.mind}`} />
+                  <RuleLine label="Gunst" value={`Maximum = 3 + ${attributeLabels.will}`} />
+                </RuleHelp>
+              )}
             </Paper>
 
             <Paper className="book-panel" p="lg">
@@ -233,6 +267,18 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                 <Read label="Anrufung" value={String(derived.invocationValue)} />
                 <Read label="Gunstgrenze" value={String(derived.favorLimit)} />
               </SimpleGrid>
+              {showRules && (
+                <RuleHelp>
+                  <RuleLine label="Initiative" value={`30 + ${attributeLabels.dexterity} × 10`} />
+                  <RuleLine
+                    label="Glaube und Magie"
+                    value={`Aus dem ${draft.century}. Jahrhundert: Glaube ${centuryLevels[draft.century]?.faith ?? centuryLevels[1].faith}, Magie ${centuryLevels[draft.century]?.magic ?? centuryLevels[1].magic}`}
+                  />
+                  <RuleLine label="Anrufung" value="Glaubensniveau + Rang einer Fertigkeit mit Ritus im Namen" />
+                  <RuleLine label="Gunstgrenze" value={`1 + abgerundete Hälfte von ${attributeLabels.will}`} />
+                  <RuleLine label="Omen" value="2 + abgerundete Hälfte des Glaubensniveaus" />
+                </RuleHelp>
+              )}
             </Paper>
           </SimpleGrid>
 
@@ -254,6 +300,17 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                 />
               ))}
             </SimpleGrid>
+            {showRules && (
+              <RuleHelp>
+                <RuleLine label="Zielwerte" value="Attribut 0 = 30, 1 = 45, 2 = 60, 3 = 75, 4 = 90." />
+                <RuleLine
+                  label="Aktuelle Zielwerte"
+                  value={attributes
+                    .map((attribute) => `${attributeLabels[attribute]} ${attributeTargetRolls[(draft.attributes[attribute] ?? 0) as keyof typeof attributeTargetRolls] ?? 30}`)
+                    .join(", ")}
+                />
+              </RuleHelp>
+            )}
           </Paper>
 
           <SimpleGrid cols={{ base: 1, md: 2 }}>
@@ -289,6 +346,12 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                   ),
                 )}
               </Stack>
+              {showRules && (
+                <RuleHelp>
+                  <RuleLine label="Fertigkeiten" value="Fertigkeitsränge ergänzen Proben, wenn eine passende Fertigkeit zur Handlung genutzt wird." />
+                  <RuleLine label="Startverteilung" value="Bei der Erschaffung: eine Fertigkeit Rang 3, drei Fertigkeiten Rang 2, alle übrigen Rang 1." />
+                </RuleHelp>
+              )}
             </Paper>
 
             <Paper className="book-panel" p="lg">
@@ -326,6 +389,12 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                   />
                   <ArmorTable name={draft.equipment.armor} rule={armor} />
                   <Read label="Gegenstände" value={draft.equipment.items.filter(Boolean).join(", ") || "-"} />
+                  {showRules && (
+                    <RuleHelp>
+                      <RuleLine label="Waffen" value="Schaden, Reichweite, Griff und Eigenschaften stammen aus der Startausrüstung im Regelanhang." />
+                      <RuleLine label="Rüstung" value="Schutz reduziert Trefferfolgen, Last belastet, Siegel beschreibt die arkane Versiegelung." />
+                    </RuleHelp>
+                  )}
                 </Stack>
               )}
             </Paper>
@@ -357,12 +426,34 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                 />
               </SimpleGrid>
             ) : (
-              <SimpleGrid cols={{ base: 1, md: 2 }}>
-                <Read label="Fokus" value={draft.supernatural.focus || "-"} />
-                <Read label="Regenerationsritual" value={draft.supernatural.regenerationRitual || "-"} />
-                <Read label="Aspekte" value={draft.supernatural.aspects.filter(Boolean).join(", ") || "-"} />
-                <Read label="Zauber" value={draft.supernatural.spells.filter(Boolean).join(", ") || "-"} />
-              </SimpleGrid>
+              <Stack>
+                <SimpleGrid cols={{ base: 1, md: 2 }}>
+                  <Read label="Fokus" value={draft.supernatural.focus || "-"} />
+                  <Read label="Regenerationsritual" value={draft.supernatural.regenerationRitual || "-"} />
+                  <Read label="Aspekte" value={draft.supernatural.aspects.filter(Boolean).join(", ") || "-"} />
+                  <Read label="Zauber" value={draft.supernatural.spells.filter(Boolean).join(", ") || "-"} />
+                </SimpleGrid>
+                {showRules && (
+                  <Stack gap="xs">
+                    <RuleHelp>
+                      <RuleLine label="Begabte" value={`Magie ist möglich ab ${attributeLabels.gift} 1.`} />
+                      <RuleLine label="Aspekte" value="Gabe 1 erlaubt einen Aspekt, Gabe 2+ erlaubt zwei Aspekte." />
+                      <RuleLine label="Zauber" value="Neue Charaktere beherrschen Gabe + 2 Zauber, maximal 5." />
+                      <RuleLine label="Zauberprobe" value="Gewürfelt wird auf Gabe; Wirkstufen verändern Zielwert, Arkana und Zauberstärke." />
+                    </RuleHelp>
+                    {aspectRules.length > 0 && (
+                      <SimpleGrid cols={{ base: 1, md: 2 }}>
+                        {aspectRules.map((rule) => (
+                          <MagicAspectRuleCard key={rule.name} rule={rule} />
+                        ))}
+                      </SimpleGrid>
+                    )}
+                    {selectedSpellRules.map((rule) => (
+                      <SpellRuleSummary key={`${rule.aspect}-${rule.name}`} rule={rule} />
+                    ))}
+                  </Stack>
+                )}
+              </Stack>
             )}
           </Paper>
         </Stack>
@@ -435,6 +526,116 @@ function ArmorTable({ name, rule }: { name: string; rule?: ArmorRule }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+function MarkRuleSummary({
+  title,
+  name,
+  rule,
+  showFacet,
+}: {
+  title: string;
+  name: string;
+  rule?: MarkRule;
+  showFacet?: boolean;
+}) {
+  return (
+    <Paper className="rule-help-card" withBorder p="sm" radius={6}>
+      <Stack gap={4}>
+        <Text size="xs" tt="uppercase" c="dimmed" fw={700}>
+          {title}
+        </Text>
+        <Text fw={700}>{name || "-"}</Text>
+        {rule ? (
+          <>
+            <RuleLine label="Vorteil" value={rule.benefit} />
+            <RuleLine label="Verwundbarkeit" value={rule.vulnerability} />
+            {showFacet && <RuleLine label="Wegfacette" value={rule.facet} />}
+            <RuleLine label="Fertigkeiten" value={rule.skills} />
+          </>
+        ) : (
+          <Text size="sm">Keine Regelbeschreibung hinterlegt.</Text>
+        )}
+      </Stack>
+    </Paper>
+  );
+}
+
+function MagicAspectRuleCard({ rule }: { rule: (typeof magicAspectRules)[number] }) {
+  return (
+    <Paper className="rule-help-card" withBorder p="sm" radius={6}>
+      <Stack gap={4}>
+        <Text size="xs" tt="uppercase" c="dimmed" fw={700}>
+          Aspekt
+        </Text>
+        <Text fw={700}>{rule.name}</Text>
+        <Text size="sm">{rule.description}</Text>
+      </Stack>
+    </Paper>
+  );
+}
+
+function SpellRuleSummary({ rule }: { rule: SpellRule }) {
+  return (
+    <Paper className="rule-help-card" withBorder p="sm" radius={6}>
+      <Stack gap="xs">
+        <Group justify="space-between" gap="xs" align="start">
+          <div>
+            <Text size="xs" tt="uppercase" c="dimmed" fw={700}>
+              {rule.aspect}
+            </Text>
+            <Text fw={700}>{rule.name}</Text>
+          </div>
+          <Text size="sm" fw={700}>
+            MW {rule.minimumRoll}
+          </Text>
+        </Group>
+        <SimpleGrid cols={{ base: 2, md: 4 }}>
+          <RuleMetric label="Art" value={rule.category} />
+          <RuleMetric label="Element" value={rule.element} />
+          <RuleMetric label="Kosten" value={rule.cost} />
+          <RuleMetric label="Reichweite" value={rule.range} />
+          <RuleMetric label="Dauer" value={rule.duration} />
+          <RuleMetric label="Bereich" value={rule.area} />
+          <RuleMetric label="Handlung" value={rule.castingTime || rule.action} />
+          <RuleMetric label="Widerstand" value={rule.resisted} />
+        </SimpleGrid>
+        <Text size="sm">{rule.description}</Text>
+      </Stack>
+    </Paper>
+  );
+}
+
+function RuleHelp({ children }: { children: ReactNode }) {
+  return (
+    <Paper className="rule-help-card" withBorder p="sm" radius={6}>
+      <Stack gap={4}>{children}</Stack>
+    </Paper>
+  );
+}
+
+function RuleLine({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+
+  return (
+    <Text size="sm">
+      <Text span fw={700}>
+        {label}:{" "}
+      </Text>
+      {value}
+    </Text>
+  );
+}
+
+function RuleMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <Stack gap={1}>
+      <Text size="xs" tt="uppercase" c="dimmed" fw={700}>
+        {label}
+      </Text>
+      <Text size="sm">{value}</Text>
+    </Stack>
   );
 }
 

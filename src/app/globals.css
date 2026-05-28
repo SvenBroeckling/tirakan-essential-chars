@@ -317,6 +317,13 @@ a {
   background: rgba(255, 250, 240, 0.42) !important;
 }
 
+.rule-help-card {
+  border-color: rgba(105, 48, 31, 0.18) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 240, 0.62), rgba(224, 203, 166, 0.26)),
+    rgba(251, 245, 233, 0.46) !important;
+}
+
 .magic-form-section {
   border-color: rgba(105, 48, 31, 0.18) !important;
   background: rgba(255, 250, 240, 0.3) !important;
@@ -408,6 +415,12 @@ a {
 
 .book-panel .mantine-Badge-root {
   border-color: rgba(105, 48, 31, 0.18);
+}
+
+.page-header .mantine-Switch-label {
+  color: #eadcc5;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
 }
 
 .wizard-progress {
