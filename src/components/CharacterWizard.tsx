@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { AttributeRow, attributeValues } from "@/components/AttributeRows";
 import { armorRules, ArmorRule, weaponRules, WeaponRule } from "@/lib/equipmentRules";
+import { magicAspectRules, SpellRule, spellRules } from "@/lib/magicRules";
 import { ancestryRules, bondRules, MarkRule, pathRules } from "@/lib/markRules";
 import {
   ancestries,
@@ -96,10 +97,11 @@ const randomItems = [
   ["Laterne", "Kreide", "Decke"],
   ["Haken", "Verbände", "Trockenfleisch"],
 ];
-const randomSupernatural = [
-  { focus: "Geschwärzter Ring", regenerationRitual: "Stille Wache vor Morgengrauen", aspects: ["Schatten", "Blut"], spells: ["Zeichen lesen", "Schutzkreis"] },
-  { focus: "Knochenamulett", regenerationRitual: "Asche und Salz erneuern", aspects: ["Asche", "Eid"], spells: ["Flüstern bannen", "Wunde schließen"] },
-  { focus: "Alte Münze", regenerationRitual: "Namen der Toten murmeln", aspects: ["Erinnerung", "Nebel"], spells: ["Omen deuten", "Blick verhüllen"] },
+const randomFoci = ["Geschwärzter Ring", "Knochenamulett", "Alte Münze"];
+const randomRegenerationRituals = [
+  "Stille Wache vor Morgengrauen",
+  "Asche und Salz erneuern",
+  "Namen der Toten murmeln",
 ];
 
 function pathSkillOptions(pathName: string) {
@@ -196,6 +198,32 @@ function validateSkills(skills: CharacterPayload["skills"]) {
   return { counts, targets, valid };
 }
 
+function magicSlots(gift: number) {
+  return {
+    aspects: gift <= 0 ? 0 : gift === 1 ? 1 : 2,
+    spells: gift <= 0 ? 0 : Math.min(gift + 2, 5),
+  };
+}
+
+function resizeValues(values: string[], size: number) {
+  return Array.from({ length: size }, (_, index) => values[index] ?? "");
+}
+
+function normalizeMagicPayload(payload: CharacterPayload): CharacterPayload {
+  const gift = payload.attributes.gift ?? 0;
+  const slots = magicSlots(gift);
+
+  return {
+    ...payload,
+    supernatural: {
+      focus: slots.aspects > 0 ? payload.supernatural.focus : "",
+      regenerationRitual: slots.aspects > 0 ? payload.supernatural.regenerationRitual : "",
+      aspects: resizeValues(payload.supernatural.aspects, slots.aspects).filter(Boolean),
+      spells: resizeValues(payload.supernatural.spells, slots.spells).filter(Boolean),
+    },
+  };
+}
+
 export function CharacterWizard() {
   const router = useRouter();
   const [active, setActive] = useState(0);
@@ -239,7 +267,27 @@ export function CharacterWizard() {
   );
   const weaponOptions = useMemo(() => weaponRules.map((rule) => rule.name), []);
   const armorOptions = useMemo(() => armorRules.map((rule) => rule.name), []);
+  const aspectOptions = useMemo(() => magicAspectRules.map((rule) => rule.name), []);
   const levels = centuryLevels[payload.century];
+  const gift = payload.attributes.gift ?? 0;
+  const slots = magicSlots(gift);
+  const finalStep = gift > 0 ? wizardSteps.length - 1 : wizardSteps.length - 2;
+  const aspectValues = resizeValues(payload.supernatural.aspects, slots.aspects);
+  const spellValues = resizeValues(payload.supernatural.spells, slots.spells);
+  const selectedAspectRules = aspectValues
+    .map((aspect) => magicAspectRules.find((rule) => rule.name === aspect))
+    .filter((rule): rule is (typeof magicAspectRules)[number] => Boolean(rule));
+  const selectedSpellRules = spellValues
+    .map((spell) => spellRules.find((rule) => rule.name === spell))
+    .filter((rule): rule is SpellRule => Boolean(rule));
+  const spellOptions = useMemo(() => {
+    const selectedAspects = aspectValues.filter(Boolean);
+    const options = selectedAspects.length
+      ? spellRules.filter((rule) => selectedAspects.includes(rule.aspect))
+      : spellRules;
+
+    return options.map((rule) => rule.name);
+  }, [aspectValues]);
 
   const setField = <K extends keyof CharacterPayload>(key: K, value: CharacterPayload[K]) => {
     setPayload((current) => ({ ...current, [key]: value }));
@@ -323,11 +371,27 @@ export function CharacterWizard() {
     }
 
     if (active === 6) {
-      setField("supernatural", randomItem(randomSupernatural));
+      const aspects = shuffled(magicAspectRules).slice(0, slots.aspects).map((rule) => rule.name);
+      const spells = shuffled(spellRules.filter((rule) => aspects.includes(rule.aspect)))
+        .slice(0, slots.spells)
+        .map((rule) => rule.name);
+
+      setField("supernatural", {
+        focus: randomItem(randomFoci),
+        regenerationRitual: randomItem(randomRegenerationRituals),
+        aspects,
+        spells,
+      });
     }
   };
 
+  const stepAvailable = (step: number) => step <= finalStep;
+
   const goToStep = (step: number) => {
+    if (!stepAvailable(step)) {
+      return;
+    }
+
     if (active === 1 && step > active && !attributeValidation.valid) {
       setAttributeAttempted(true);
       return;
@@ -355,7 +419,7 @@ export function CharacterWizard() {
     }
 
     setActive((step) => {
-      const next = Math.min(step + 1, wizardSteps.length - 1);
+      const next = Math.min(step + 1, finalStep);
       setMaxReached((reached) => Math.max(reached, next));
       return next;
     });
@@ -419,10 +483,11 @@ export function CharacterWizard() {
 
   const save = async () => {
     setSaving(true);
+    const nextPayload = normalizeMagicPayload(payload);
     const response = await fetch("/api/characters", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(nextPayload),
     });
     const result = await response.json();
     setSaving(false);
@@ -463,7 +528,8 @@ export function CharacterWizard() {
                   type="button"
                   className="step-dot"
                   data-active={index === active}
-                  data-reached={index <= maxReached}
+                  data-reached={index <= maxReached && stepAvailable(index)}
+                  disabled={!stepAvailable(index)}
                   onClick={() => goToStep(index)}
                   aria-label={`Zu Schritt ${index + 1}: ${step}`}
                   title={`${index + 1}. ${step}`}
@@ -731,42 +797,111 @@ export function CharacterWizard() {
             )}
 
             {active === 6 && (
-              <Stack>
-                <SimpleGrid cols={{ base: 1, md: 2 }}>
-                  <TextInput
-                    label="Fokus"
-                    value={payload.supernatural.focus}
-                    onChange={(e) =>
-                      setField("supernatural", setNested(payload.supernatural, { focus: e.currentTarget.value }))
-                    }
-                  />
-                  <TextInput
-                    label="Regenerationsritual"
-                    value={payload.supernatural.regenerationRitual}
-                    onChange={(e) =>
-                      setField("supernatural", setNested(payload.supernatural, { regenerationRitual: e.currentTarget.value }))
-                    }
-                  />
-                  {payload.supernatural.aspects.map((aspect, index) => (
-                    <TextInput
-                      key={index}
-                      label={`Aspekt ${index + 1}`}
-                      value={aspect}
-                      onChange={(e) => {
-                        const aspects = [...payload.supernatural.aspects];
-                        aspects[index] = e.currentTarget.value;
-                        setField("supernatural", setNested(payload.supernatural, { aspects }));
-                      }}
-                    />
-                  ))}
-                </SimpleGrid>
-                <Textarea
-                  label="Zauber und Rituale"
-                  value={payload.supernatural.spells.join("\n")}
-                  onChange={(e) =>
-                    setField("supernatural", setNested(payload.supernatural, { spells: e.currentTarget.value.split("\n") }))
-                  }
-                />
+              <Stack gap="md">
+                <Paper className="magic-form-section" withBorder p="md" radius={6}>
+                  <Stack gap="md">
+                    <Text size="sm" fw={700}>
+                      Praxis
+                    </Text>
+                    <SimpleGrid cols={{ base: 1, md: 2 }}>
+                      <TextInput
+                        label="Fokus"
+                        value={payload.supernatural.focus}
+                        onChange={(e) =>
+                          setField("supernatural", setNested(payload.supernatural, { focus: e.currentTarget.value }))
+                        }
+                      />
+                      <TextInput
+                        label="Regenerationsritual"
+                        value={payload.supernatural.regenerationRitual}
+                        onChange={(e) =>
+                          setField("supernatural", setNested(payload.supernatural, { regenerationRitual: e.currentTarget.value }))
+                        }
+                      />
+                    </SimpleGrid>
+                  </Stack>
+                </Paper>
+
+                <Paper className="magic-form-section" withBorder p="md" radius={6}>
+                  <Stack gap="md">
+                    <Group justify="space-between" align="baseline">
+                      <Text size="sm" fw={700}>
+                        Aspekte
+                      </Text>
+                      <Text size="xs" c="dimmed" fw={700}>
+                        {slots.aspects} erlaubt
+                      </Text>
+                    </Group>
+                    <SimpleGrid cols={{ base: 1, md: 2 }}>
+                      {aspectValues.map((aspect, index) => (
+                        <Select
+                          key={index}
+                          label={`Aspekt ${index + 1}`}
+                          data={aspectOptions}
+                          value={aspect || null}
+                          searchable
+                          onChange={(value) => {
+                            const aspects = [...aspectValues];
+                            aspects[index] = value ?? "";
+                            const allowedSpellNames = new Set(
+                              spellRules.filter((rule) => aspects.includes(rule.aspect)).map((rule) => rule.name),
+                            );
+                            setField(
+                              "supernatural",
+                              setNested(payload.supernatural, {
+                                aspects,
+                                spells: spellValues.map((spell) => (allowedSpellNames.has(spell) ? spell : "")),
+                              }),
+                            );
+                          }}
+                        />
+                      ))}
+                    </SimpleGrid>
+                    {selectedAspectRules.length > 0 && (
+                      <SimpleGrid cols={{ base: 1, md: 2 }}>
+                        {selectedAspectRules.map((rule) => (
+                          <MagicAspectRuleCard key={rule.name} rule={rule} />
+                        ))}
+                      </SimpleGrid>
+                    )}
+                  </Stack>
+                </Paper>
+
+                <Paper className="magic-form-section" withBorder p="md" radius={6}>
+                  <Stack gap="md">
+                    <Group justify="space-between" align="baseline">
+                      <Text size="sm" fw={700}>
+                        Zauber
+                      </Text>
+                      <Text size="xs" c="dimmed" fw={700}>
+                        {slots.spells} erlaubt
+                      </Text>
+                    </Group>
+                    <SimpleGrid cols={{ base: 1, md: 2 }}>
+                      {spellValues.map((spell, index) => (
+                        <Select
+                          key={index}
+                          label={`Zauber ${index + 1}`}
+                          data={spellOptions}
+                          value={spell || null}
+                          searchable
+                          onChange={(value) => {
+                            const spells = [...spellValues];
+                            spells[index] = value ?? "";
+                            setField("supernatural", setNested(payload.supernatural, { spells }));
+                          }}
+                        />
+                      ))}
+                    </SimpleGrid>
+                    {selectedSpellRules.length > 0 && (
+                      <Stack gap="xs">
+                        {selectedSpellRules.map((rule) => (
+                          <SpellRuleSummary key={`${rule.aspect}-${rule.name}`} rule={rule} />
+                        ))}
+                      </Stack>
+                    )}
+                  </Stack>
+                </Paper>
               </Stack>
             )}
           </Paper>
@@ -775,7 +910,7 @@ export function CharacterWizard() {
             <Button variant="default" disabled={active === 0} onClick={() => setActive((step) => step - 1)}>
               Zurück
             </Button>
-            {active < wizardSteps.length - 1 ? (
+            {active < finalStep ? (
               <Button color="red.9" onClick={nextStep}>
                 Weiter
               </Button>
@@ -944,6 +1079,53 @@ function ArmorRuleSummary({ rule }: { rule?: ArmorRule }) {
         <ReadRule label="Versiegelung" value={rule.sealing} />
         <ReadRule label="Eigenschaften" value={rule.properties} />
       </SimpleGrid>
+    </Paper>
+  );
+}
+
+function MagicAspectRuleCard({ rule }: { rule: (typeof magicAspectRules)[number] }) {
+  return (
+    <Paper className="mark-rule-card" withBorder p="md" radius={6}>
+      <Stack gap="xs">
+        <div>
+          <Text size="xs" tt="uppercase" c="dimmed" fw={700}>
+            Aspekt
+          </Text>
+          <Text fw={700}>{rule.name}</Text>
+        </div>
+        <Text size="sm">{rule.description}</Text>
+      </Stack>
+    </Paper>
+  );
+}
+
+function SpellRuleSummary({ rule }: { rule: SpellRule }) {
+  return (
+    <Paper className="equipment-rule-card" withBorder p="sm" radius={6}>
+      <Stack gap="xs">
+        <Group justify="space-between" gap="xs" align="start">
+          <div>
+            <Text size="xs" tt="uppercase" c="dimmed" fw={700}>
+              {rule.aspect}
+            </Text>
+            <Text fw={700}>{rule.name}</Text>
+          </div>
+          <Text size="sm" fw={700}>
+            MW {rule.minimumRoll}
+          </Text>
+        </Group>
+        <SimpleGrid cols={{ base: 2, md: 4 }}>
+          <ReadRule label="Art" value={rule.category} />
+          <ReadRule label="Element" value={rule.element} />
+          <ReadRule label="Kosten" value={rule.cost} />
+          <ReadRule label="Reichweite" value={rule.range} />
+          <ReadRule label="Dauer" value={rule.duration} />
+          <ReadRule label="Bereich" value={rule.area} />
+          <ReadRule label="Handlung" value={rule.castingTime || rule.action} />
+          <ReadRule label="Widerstand" value={rule.resisted} />
+        </SimpleGrid>
+        <Text size="sm">{rule.description}</Text>
+      </Stack>
     </Paper>
   );
 }

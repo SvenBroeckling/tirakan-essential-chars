@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { deriveValues } from "@/lib/rulebook";
+import { deriveValues, normalizeAttributes } from "@/lib/rulebook";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ hash: string }> }) {
   const { hash } = await params;
@@ -12,7 +12,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ha
     return NextResponse.json({ error: "Nicht gefunden" }, { status: 404 });
   }
 
-  const nextAttributes = (body.attributes ?? current.attributes) as Record<string, number>;
+  const nextAttributes = normalizeAttributes((body.attributes ?? current.attributes) as Record<string, number>);
   const nextSkills = (body.skills ?? current.skills) as Array<{ name: string; rank: number }>;
   const nextCentury = Number(body.century ?? current.century);
   const derived = deriveValues({

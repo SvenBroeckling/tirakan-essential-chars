@@ -1,15 +1,26 @@
 export const attributes = [
-  "Geist",
-  "Wille",
-  "Instinkt",
-  "Geschick",
-  "Körper",
-  "Erscheinung",
-  "Gabe",
-  "Wahrnehmung",
+  "mind",
+  "will",
+  "instinct",
+  "dexterity",
+  "body",
+  "presence",
+  "gift",
+  "perception",
 ] as const;
 
 export type AttributeName = (typeof attributes)[number];
+
+export const attributeLabels: Record<AttributeName, string> = {
+  mind: "Geist",
+  will: "Wille",
+  instinct: "Instinkt",
+  dexterity: "Geschick",
+  body: "Körper",
+  presence: "Erscheinung",
+  gift: "Gabe",
+  perception: "Wahrnehmung",
+};
 
 export const centuryLevels: Record<number, { faith: number; magic: number }> = {
   1: { faith: 1, magic: 1 },
@@ -204,12 +215,27 @@ export type CharacterPayload = {
   notes?: string;
 };
 
+export function normalizeAttributes(value?: Partial<Record<string, number>> | null): Record<AttributeName, number> {
+  const normalized = initialAttributes();
+
+  for (const [rawKey, rawValue] of Object.entries(value ?? {})) {
+    const key = attributes.includes(rawKey as AttributeName) ? (rawKey as AttributeName) : null;
+
+    if (key) {
+      normalized[key] = Number(rawValue) || 0;
+    }
+  }
+
+  return normalized;
+}
+
 export function deriveValues(payload: Pick<CharacterPayload, "attributes" | "century" | "skills">) {
   const levels = centuryLevels[payload.century] ?? centuryLevels[1];
-  const body = payload.attributes.Körper ?? 0;
-  const will = payload.attributes.Wille ?? 0;
-  const dexterity = payload.attributes.Geschick ?? 0;
-  const mind = payload.attributes.Geist ?? 0;
+  const normalizedAttributes = normalizeAttributes(payload.attributes);
+  const body = normalizedAttributes.body;
+  const will = normalizedAttributes.will;
+  const dexterity = normalizedAttributes.dexterity;
+  const mind = normalizedAttributes.mind;
   const rite = payload.skills.find((skill) => skill.name.toLowerCase().includes("ritus"))?.rank ?? 0;
 
   return {

@@ -16,8 +16,9 @@ import {
 } from "@mantine/core";
 import Link from "next/link";
 import { useState } from "react";
-import { AttributeRow } from "@/components/AttributeRows";
-import { attributes, deriveValues } from "@/lib/rulebook";
+import { AttributeRow, sheetRankValues, SkillRankRow } from "@/components/AttributeRows";
+import { armorRules, ArmorRule, weaponRules, WeaponRule } from "@/lib/equipmentRules";
+import { attributes, deriveValues, normalizeAttributes } from "@/lib/rulebook";
 
 type CharacterView = {
   hash: string;
@@ -42,6 +43,8 @@ type CharacterView = {
     secondaryWeapon: string;
     armor: string;
     items: string[];
+    customWeapons?: Record<string, WeaponRule>;
+    customArmors?: Record<string, ArmorRule>;
   };
   supernatural: {
     focus: string;
@@ -64,9 +67,17 @@ type CharacterView = {
 };
 
 export function CharacterDetail({ character }: { character: CharacterView }) {
-  const [draft, setDraft] = useState(character);
+  const [draft, setDraft] = useState({ ...character, attributes: normalizeAttributes(character.attributes) });
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const primaryWeapon =
+    weaponRules.find((rule) => rule.name === draft.equipment.primaryWeapon) ??
+    draft.equipment.customWeapons?.[draft.equipment.primaryWeapon];
+  const secondaryWeapon =
+    weaponRules.find((rule) => rule.name === draft.equipment.secondaryWeapon) ??
+    draft.equipment.customWeapons?.[draft.equipment.secondaryWeapon];
+  const armor =
+    armorRules.find((rule) => rule.name === draft.equipment.armor) ?? draft.equipment.customArmors?.[draft.equipment.armor];
   const derived = deriveValues({
     attributes: draft.attributes as never,
     century: draft.century,
@@ -233,6 +244,8 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                   key={attribute}
                   attribute={attribute}
                   value={draft.attributes[attribute] ?? 0}
+                  values={sheetRankValues}
+                  showTargetRoll
                   onChange={
                     editing === "attributes"
                       ? (value) => setDraft({ ...draft, attributes: { ...draft.attributes, [attribute]: value } })
@@ -272,10 +285,7 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                       />
                     </Group>
                   ) : (
-                    <Group key={index} justify="space-between">
-                      <Text>{skill.name || "-"}</Text>
-                      <Badge variant="light">Rang {skill.rank}</Badge>
-                    </Group>
+                    <SkillRankRow key={index} name={skill.name} value={skill.rank} />
                   ),
                 )}
               </Stack>
@@ -308,9 +318,13 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                 </Stack>
               ) : (
                 <Stack>
-                  <Read label="Primärwaffe" value={draft.equipment.primaryWeapon || "-"} />
-                  <Read label="Zweitwaffe" value={draft.equipment.secondaryWeapon || "-"} />
-                  <Read label="Rüstung" value={draft.equipment.armor || "-"} />
+                  <WeaponTable
+                    weapons={[
+                      { slot: "Primärwaffe", name: draft.equipment.primaryWeapon, rule: primaryWeapon },
+                      { slot: "Zweitwaffe", name: draft.equipment.secondaryWeapon, rule: secondaryWeapon },
+                    ]}
+                  />
+                  <ArmorTable name={draft.equipment.armor} rule={armor} />
                   <Read label="Gegenstände" value={draft.equipment.items.filter(Boolean).join(", ") || "-"} />
                 </Stack>
               )}
@@ -354,6 +368,73 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
         </Stack>
       </Container>
     </main>
+  );
+}
+
+function WeaponTable({
+  weapons,
+}: {
+  weapons: Array<{ slot: string; name: string; rule?: WeaponRule }>;
+}) {
+  return (
+    <div className="equipment-table-wrap">
+      <table className="equipment-table">
+        <thead>
+          <tr>
+            <th>Waffe</th>
+            <th>Schaden</th>
+            <th>Reichweite</th>
+            <th>Griff</th>
+            <th>Eigenschaften</th>
+          </tr>
+        </thead>
+        <tbody>
+          {weapons.map(({ slot, name, rule }) => (
+            <tr key={slot}>
+              <td>
+                <Text fw={700}>{name || "-"}</Text>
+                <Text size="xs" c="dimmed">
+                  {slot}
+                </Text>
+              </td>
+              <td>{rule?.damage ?? "-"}</td>
+              <td>{rule?.range ?? "-"}</td>
+              <td>{rule?.grip ?? "-"}</td>
+              <td>{rule?.properties ?? "-"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ArmorTable({ name, rule }: { name: string; rule?: ArmorRule }) {
+  return (
+    <div className="equipment-table-wrap">
+      <table className="equipment-table">
+        <thead>
+          <tr>
+            <th>Rüstung</th>
+            <th>Schutz</th>
+            <th>Last</th>
+            <th>Siegel</th>
+            <th>Eigenschaften</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <Text fw={700}>{name || "-"}</Text>
+            </td>
+            <td>{rule?.protection ?? "-"}</td>
+            <td>{rule?.load ?? "-"}</td>
+            <td>{rule?.sealing ?? "-"}</td>
+            <td>{rule?.properties ?? "-"}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   );
 }
 

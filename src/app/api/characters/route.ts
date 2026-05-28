@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { createCharacterHash } from "@/lib/hash";
 import { prisma } from "@/lib/prisma";
-import { CharacterPayload, deriveValues, initialAttributes } from "@/lib/rulebook";
+import { CharacterPayload, deriveValues, normalizeAttributes } from "@/lib/rulebook";
 
 function normalizePayload(body: Partial<CharacterPayload>): CharacterPayload {
-  const attributes = { ...initialAttributes(), ...(body.attributes ?? {}) };
+  const attributes = normalizeAttributes(body.attributes);
   const skills = Array.isArray(body.skills) ? body.skills.filter((skill) => skill.name?.trim()) : [];
 
   return {
