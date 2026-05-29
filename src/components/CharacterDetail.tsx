@@ -1,19 +1,21 @@
 "use client";
 
 import {
+  ActionIcon,
   Badge,
   Button,
   Container,
   Group,
+  Modal,
   NumberInput,
   Paper,
   SimpleGrid,
   Stack,
-  Switch,
   Text,
   TextInput,
   Textarea,
   Title,
+  Tooltip,
 } from "@mantine/core";
 import Link from "next/link";
 import { ReactNode, useState } from "react";
@@ -73,7 +75,7 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
   const [draft, setDraft] = useState({ ...character, attributes: normalizeAttributes(character.attributes) });
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [showRules, setShowRules] = useState(false);
+  const [infoModal, setInfoModal] = useState<{ title: string; content: ReactNode } | null>(null);
   const primaryWeapon =
     weaponRules.find((rule) => rule.name === draft.equipment.primaryWeapon) ??
     draft.equipment.customWeapons?.[draft.equipment.primaryWeapon];
@@ -118,6 +120,15 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
 
   return (
     <main className="book-page">
+      <Modal
+        opened={Boolean(infoModal)}
+        onClose={() => setInfoModal(null)}
+        title={infoModal?.title}
+        size="lg"
+        centered
+      >
+        {infoModal?.content}
+      </Modal>
       <Container size="lg">
         <Stack gap="lg">
           <Group className="page-header" justify="space-between" align="start">
@@ -135,54 +146,66 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                 </Button>
               </Group>
             </Stack>
-            <Group>
-              <Switch
-                label="Beschreibungen und Regeln"
-                checked={showRules}
-                onChange={(event) => setShowRules(event.currentTarget.checked)}
-              />
-              <Button component={Link} href="/characters/new" variant="default">
-                Neu
-              </Button>
-              <Button color="red.9" loading={saving} onClick={save}>
-                Änderungen speichern
-              </Button>
-            </Group>
+            <Link className="page-brand-link" href="/" aria-label="Zur Startseite">
+              <span className="page-brand-mark">TE</span>
+              <span className="page-brand-text">
+                <span>Tirakan</span>
+                <span>Essential</span>
+              </span>
+            </Link>
           </Group>
 
           <Paper className="book-panel" p="lg">
-            <SectionTitle title="Identität" onEdit={() => setEditing("identity")} />
+            <SectionTitle
+              title="Identität"
+              onEdit={() => setEditing("identity")}
+              onInfo={() =>
+                setInfoModal({
+                  title: "Identität",
+                  content: (
+                    <RuleHelp>
+                      <RuleLine label="Konzept" value="Der Konzeptsatz beschreibt die Figur knapp und spielbar." />
+                      <RuleLine label="Jahrhundert" value="Das Jahrhundert bestimmt Glaubens- und Magieniveau." />
+                      <RuleLine label="Hash" value="Wer den Hash kennt, kann diesen Charakterbogen öffnen." />
+                    </RuleHelp>
+                  ),
+                })
+              }
+            />
             {editing === "identity" ? (
-              <SimpleGrid cols={{ base: 1, md: 2 }}>
-                <TextInput label="Name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.currentTarget.value })} />
-                <TextInput
-                  label="Geburtsdatum"
-                  value={draft.birthDate ?? ""}
-                  onChange={(e) => setDraft({ ...draft, birthDate: e.currentTarget.value })}
-                />
-                <NumberInput
-                  label="Jahrhundert"
-                  min={1}
-                  max={10}
-                  value={draft.century}
-                  onChange={(value) => setDraft({ ...draft, century: Number(value) || 1 })}
-                />
-                <TextInput
-                  label="Kampagne"
-                  value={draft.campaign ?? ""}
-                  onChange={(e) => setDraft({ ...draft, campaign: e.currentTarget.value })}
-                />
-                <Textarea
-                  label="Konzeptsatz"
-                  value={draft.concept}
-                  onChange={(e) => setDraft({ ...draft, concept: e.currentTarget.value })}
-                />
-                <Textarea
-                  label="Schuld oder Eid"
-                  value={draft.oathOrDebt ?? ""}
-                  onChange={(e) => setDraft({ ...draft, oathOrDebt: e.currentTarget.value })}
-                />
-              </SimpleGrid>
+              <Stack>
+                <SimpleGrid cols={{ base: 1, md: 2 }}>
+                  <TextInput label="Name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.currentTarget.value })} />
+                  <TextInput
+                    label="Geburtsdatum"
+                    value={draft.birthDate ?? ""}
+                    onChange={(e) => setDraft({ ...draft, birthDate: e.currentTarget.value })}
+                  />
+                  <NumberInput
+                    label="Jahrhundert"
+                    min={1}
+                    max={10}
+                    value={draft.century}
+                    onChange={(value) => setDraft({ ...draft, century: Number(value) || 1 })}
+                  />
+                  <TextInput
+                    label="Kampagne"
+                    value={draft.campaign ?? ""}
+                    onChange={(e) => setDraft({ ...draft, campaign: e.currentTarget.value })}
+                  />
+                  <Textarea
+                    label="Konzeptsatz"
+                    value={draft.concept}
+                    onChange={(e) => setDraft({ ...draft, concept: e.currentTarget.value })}
+                  />
+                  <Textarea
+                    label="Schuld oder Eid"
+                    value={draft.oathOrDebt ?? ""}
+                    onChange={(e) => setDraft({ ...draft, oathOrDebt: e.currentTarget.value })}
+                  />
+                </SimpleGrid>
+                <SaveButton saving={saving} onSave={save} />
+              </Stack>
             ) : (
               <SimpleGrid cols={{ base: 1, md: 3 }}>
                 <Read label="Konzept" value={draft.concept} />
@@ -197,13 +220,29 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
 
           <SimpleGrid cols={{ base: 1, md: 3 }}>
             <Paper className="book-panel" p="lg">
-              <SectionTitle title="Prägungen" onEdit={() => setEditing("marks")} />
+              <SectionTitle
+                title="Prägungen"
+                onEdit={() => setEditing("marks")}
+                onInfo={() =>
+                  setInfoModal({
+                    title: "Prägungen",
+                    content: (
+                      <Stack gap="xs">
+                        <MarkRuleSummary title="Abstammung" name={draft.ancestry} rule={ancestryRule} />
+                        <MarkRuleSummary title="Weg" name={draft.path} rule={pathRule} showFacet />
+                        <MarkRuleSummary title="Bindung" name={draft.bond} rule={bondRule} />
+                      </Stack>
+                    ),
+                  })
+                }
+              />
               {editing === "marks" ? (
                 <Stack>
                   <TextInput label="Abstammung" value={draft.ancestry} onChange={(e) => setDraft({ ...draft, ancestry: e.currentTarget.value, ancestryCustom: true })} />
                   <TextInput label="Weg" value={draft.path} onChange={(e) => setDraft({ ...draft, path: e.currentTarget.value, pathCustom: true })} />
                   <TextInput label="Bindung" value={draft.bond} onChange={(e) => setDraft({ ...draft, bond: e.currentTarget.value, bondCustom: true })} />
                   <TextInput label="Mal" value={draft.mark} onChange={(e) => setDraft({ ...draft, mark: e.currentTarget.value })} />
+                  <SaveButton saving={saving} onSave={save} />
                 </Stack>
               ) : (
                 <Stack>
@@ -211,32 +250,45 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                   <Read label="Weg" value={draft.path} custom={draft.pathCustom} />
                   <Read label="Bindung" value={draft.bond} custom={draft.bondCustom} />
                   <Read label="Mal" value={draft.mark} />
-                  {showRules && (
-                    <Stack gap="xs">
-                      <MarkRuleSummary title="Abstammung" name={draft.ancestry} rule={ancestryRule} />
-                      <MarkRuleSummary title="Weg" name={draft.path} rule={pathRule} showFacet />
-                      <MarkRuleSummary title="Bindung" name={draft.bond} rule={bondRule} />
-                    </Stack>
-                  )}
                 </Stack>
               )}
             </Paper>
 
             <Paper className="book-panel" p="lg">
-              <SectionTitle title="Zustand" onEdit={() => setEditing("conditions")} />
+              <SectionTitle
+                title="Zustand"
+                onEdit={() => setEditing("conditions")}
+                onInfo={() =>
+                  setInfoModal({
+                    title: "Zustand",
+                    content: (
+                      <RuleHelp>
+                        <RuleLine label="Wunden" value={`Maximum = 3 + ${attributeLabels.body}`} />
+                        <RuleLine label="Bürde" value={`Maximum = 5 + abgerundete Hälfte von ${attributeLabels.will}`} />
+                        <RuleLine label="Omen" value="Maximum = 2 + abgerundete Hälfte des Glaubensniveaus" />
+                        <RuleLine label="Arkana" value={`Maximum = 3 + ${attributeLabels.mind}`} />
+                        <RuleLine label="Gunst" value={`Maximum = 3 + ${attributeLabels.will}`} />
+                      </RuleHelp>
+                    ),
+                  })
+                }
+              />
               {editing === "conditions" ? (
-                <SimpleGrid cols={2}>
-                  {Object.entries(draft.conditions).map(([key, value]) => (
-                    <NumberInput
-                      key={key}
-                      label={key}
-                      value={value}
-                      onChange={(next) =>
-                        setDraft({ ...draft, conditions: { ...draft.conditions, [key]: Number(next) || 0 } })
-                      }
-                    />
-                  ))}
-                </SimpleGrid>
+                <Stack>
+                  <SimpleGrid cols={2}>
+                    {Object.entries(draft.conditions).map(([key, value]) => (
+                      <NumberInput
+                        key={key}
+                        label={key}
+                        value={value}
+                        onChange={(next) =>
+                          setDraft({ ...draft, conditions: { ...draft.conditions, [key]: Number(next) || 0 } })
+                        }
+                      />
+                    ))}
+                  </SimpleGrid>
+                  <SaveButton saving={saving} onSave={save} />
+                </Stack>
               ) : (
                 <SimpleGrid cols={2}>
                   <Read label="Wunden" value={`${draft.conditions.wounds ?? 0} / ${derived.woundThreshold}`} />
@@ -247,19 +299,30 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                   <Read label="Verderbnis" value={String(draft.conditions.corruption ?? 0)} />
                 </SimpleGrid>
               )}
-              {showRules && (
-                <RuleHelp>
-                  <RuleLine label="Wunden" value={`Maximum = 3 + ${attributeLabels.body}`} />
-                  <RuleLine label="Bürde" value={`Maximum = 5 + abgerundete Hälfte von ${attributeLabels.will}`} />
-                  <RuleLine label="Omen" value="Maximum = 2 + abgerundete Hälfte des Glaubensniveaus" />
-                  <RuleLine label="Arkana" value={`Maximum = 3 + ${attributeLabels.mind}`} />
-                  <RuleLine label="Gunst" value={`Maximum = 3 + ${attributeLabels.will}`} />
-                </RuleHelp>
-              )}
             </Paper>
 
             <Paper className="book-panel" p="lg">
-              <SectionTitle title="Abgeleitet" onEdit={() => setEditing(null)} />
+              <SectionTitle
+                title="Abgeleitet"
+                onEdit={() => setEditing(null)}
+                onInfo={() =>
+                  setInfoModal({
+                    title: "Abgeleitet",
+                    content: (
+                      <RuleHelp>
+                        <RuleLine label="Initiative" value={`30 + ${attributeLabels.dexterity} × 10`} />
+                        <RuleLine
+                          label="Glaube und Magie"
+                          value={`Aus dem ${draft.century}. Jahrhundert: Glaube ${centuryLevels[draft.century]?.faith ?? centuryLevels[1].faith}, Magie ${centuryLevels[draft.century]?.magic ?? centuryLevels[1].magic}`}
+                        />
+                        <RuleLine label="Anrufung" value="Glaubensniveau + Rang einer Fertigkeit mit Ritus im Namen" />
+                        <RuleLine label="Gunstgrenze" value={`1 + abgerundete Hälfte von ${attributeLabels.will}`} />
+                        <RuleLine label="Omen" value="2 + abgerundete Hälfte des Glaubensniveaus" />
+                      </RuleHelp>
+                    ),
+                  })
+                }
+              />
               <SimpleGrid cols={2}>
                 <Read label="Initiative" value={String(derived.initiative)} />
                 <Read label="Glaube" value={String(derived.faithLevel)} />
@@ -267,23 +330,33 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                 <Read label="Anrufung" value={String(derived.invocationValue)} />
                 <Read label="Gunstgrenze" value={String(derived.favorLimit)} />
               </SimpleGrid>
-              {showRules && (
-                <RuleHelp>
-                  <RuleLine label="Initiative" value={`30 + ${attributeLabels.dexterity} × 10`} />
-                  <RuleLine
-                    label="Glaube und Magie"
-                    value={`Aus dem ${draft.century}. Jahrhundert: Glaube ${centuryLevels[draft.century]?.faith ?? centuryLevels[1].faith}, Magie ${centuryLevels[draft.century]?.magic ?? centuryLevels[1].magic}`}
-                  />
-                  <RuleLine label="Anrufung" value="Glaubensniveau + Rang einer Fertigkeit mit Ritus im Namen" />
-                  <RuleLine label="Gunstgrenze" value={`1 + abgerundete Hälfte von ${attributeLabels.will}`} />
-                  <RuleLine label="Omen" value="2 + abgerundete Hälfte des Glaubensniveaus" />
-                </RuleHelp>
-              )}
             </Paper>
           </SimpleGrid>
 
           <Paper className="book-panel" p="lg">
-            <SectionTitle title="Attribute" onEdit={() => setEditing("attributes")} />
+            <SectionTitle
+              title="Attribute"
+              onEdit={() => setEditing("attributes")}
+              onInfo={() =>
+                setInfoModal({
+                  title: "Attribute",
+                  content: (
+                    <RuleHelp>
+                      <RuleLine label="Zielwerte" value="Attribut 0 = 30, 1 = 45, 2 = 60, 3 = 75, 4 = 90." />
+                      <RuleLine
+                        label="Aktuelle Zielwerte"
+                        value={attributes
+                          .map(
+                            (attribute) =>
+                              `${attributeLabels[attribute]} ${attributeTargetRolls[(draft.attributes[attribute] ?? 0) as keyof typeof attributeTargetRolls] ?? 30}`,
+                          )
+                          .join(", ")}
+                      />
+                    </RuleHelp>
+                  ),
+                })
+              }
+            />
             <SimpleGrid cols={{ base: 1, md: 2 }}>
               {attributes.map((attribute) => (
                 <AttributeRow
@@ -300,22 +373,26 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                 />
               ))}
             </SimpleGrid>
-            {showRules && (
-              <RuleHelp>
-                <RuleLine label="Zielwerte" value="Attribut 0 = 30, 1 = 45, 2 = 60, 3 = 75, 4 = 90." />
-                <RuleLine
-                  label="Aktuelle Zielwerte"
-                  value={attributes
-                    .map((attribute) => `${attributeLabels[attribute]} ${attributeTargetRolls[(draft.attributes[attribute] ?? 0) as keyof typeof attributeTargetRolls] ?? 30}`)
-                    .join(", ")}
-                />
-              </RuleHelp>
-            )}
+            {editing === "attributes" && <SaveButton saving={saving} onSave={save} />}
           </Paper>
 
           <SimpleGrid cols={{ base: 1, md: 2 }}>
             <Paper className="book-panel" p="lg">
-              <SectionTitle title="Fertigkeiten" onEdit={() => setEditing("skills")} />
+              <SectionTitle
+                title="Fertigkeiten"
+                onEdit={() => setEditing("skills")}
+                onInfo={() =>
+                  setInfoModal({
+                    title: "Fertigkeiten",
+                    content: (
+                      <RuleHelp>
+                        <RuleLine label="Fertigkeiten" value="Fertigkeitsränge ergänzen Proben, wenn eine passende Fertigkeit zur Handlung genutzt wird." />
+                        <RuleLine label="Startverteilung" value="Bei der Erschaffung: eine Fertigkeit Rang 3, drei Fertigkeiten Rang 2, alle übrigen Rang 1." />
+                      </RuleHelp>
+                    ),
+                  })
+                }
+              />
               <Stack>
                 {draft.skills.map((skill, index) =>
                   editing === "skills" ? (
@@ -345,17 +422,26 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                     <SkillRankRow key={index} name={skill.name} value={skill.rank} />
                   ),
                 )}
+                {editing === "skills" && <SaveButton saving={saving} onSave={save} />}
               </Stack>
-              {showRules && (
-                <RuleHelp>
-                  <RuleLine label="Fertigkeiten" value="Fertigkeitsränge ergänzen Proben, wenn eine passende Fertigkeit zur Handlung genutzt wird." />
-                  <RuleLine label="Startverteilung" value="Bei der Erschaffung: eine Fertigkeit Rang 3, drei Fertigkeiten Rang 2, alle übrigen Rang 1." />
-                </RuleHelp>
-              )}
             </Paper>
 
             <Paper className="book-panel" p="lg">
-              <SectionTitle title="Ausrüstung" onEdit={() => setEditing("equipment")} />
+              <SectionTitle
+                title="Ausrüstung"
+                onEdit={() => setEditing("equipment")}
+                onInfo={() =>
+                  setInfoModal({
+                    title: "Ausrüstung",
+                    content: (
+                      <RuleHelp>
+                        <RuleLine label="Waffen" value="Schaden, Reichweite, Griff und Eigenschaften stammen aus der Startausrüstung im Regelanhang." />
+                        <RuleLine label="Rüstung" value="Schutz reduziert Trefferfolgen, Last belastet, Siegel beschreibt die arkane Versiegelung." />
+                      </RuleHelp>
+                    ),
+                  })
+                }
+              />
               {editing === "equipment" ? (
                 <Stack>
                   <TextInput
@@ -378,6 +464,7 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                     value={draft.equipment.items.join("\n")}
                     onChange={(e) => setDraft({ ...draft, equipment: { ...draft.equipment, items: e.currentTarget.value.split("\n") } })}
                   />
+                  <SaveButton saving={saving} onSave={save} />
                 </Stack>
               ) : (
                 <Stack>
@@ -389,69 +476,81 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                   />
                   <ArmorTable name={draft.equipment.armor} rule={armor} />
                   <Read label="Gegenstände" value={draft.equipment.items.filter(Boolean).join(", ") || "-"} />
-                  {showRules && (
-                    <RuleHelp>
-                      <RuleLine label="Waffen" value="Schaden, Reichweite, Griff und Eigenschaften stammen aus der Startausrüstung im Regelanhang." />
-                      <RuleLine label="Rüstung" value="Schutz reduziert Trefferfolgen, Last belastet, Siegel beschreibt die arkane Versiegelung." />
-                    </RuleHelp>
-                  )}
                 </Stack>
               )}
             </Paper>
           </SimpleGrid>
 
           <Paper className="book-panel" p="lg">
-            <SectionTitle title="Magie und Glaube" onEdit={() => setEditing("supernatural")} />
+            <SectionTitle
+              title="Magie und Glaube"
+              onEdit={() => setEditing("supernatural")}
+              onInfo={() =>
+                setInfoModal({
+                  title: "Magie und Glaube",
+                  content: (
+                    <Stack gap="xs">
+                      <RuleHelp>
+                        <RuleLine label="Begabte" value={`Magie ist möglich ab ${attributeLabels.gift} 1.`} />
+                        <RuleLine label="Aspekte" value="Gabe 1 erlaubt einen Aspekt, Gabe 2+ erlaubt zwei Aspekte." />
+                        <RuleLine label="Zauber" value="Neue Charaktere beherrschen Gabe + 2 Zauber, maximal 5." />
+                        <RuleLine label="Zauberprobe" value="Gewürfelt wird auf Gabe; Wirkstufen verändern Zielwert, Arkana und Zauberstärke." />
+                      </RuleHelp>
+                      {aspectRules.length > 0 && (
+                        <SimpleGrid cols={{ base: 1, md: 2 }}>
+                          {aspectRules.map((rule) => (
+                            <MagicAspectRuleCard key={rule.name} rule={rule} />
+                          ))}
+                        </SimpleGrid>
+                      )}
+                      {selectedSpellRules.map((rule) => (
+                        <SpellRuleSummary key={`${rule.aspect}-${rule.name}`} rule={rule} />
+                      ))}
+                    </Stack>
+                  ),
+                })
+              }
+            />
             {editing === "supernatural" ? (
-              <SimpleGrid cols={{ base: 1, md: 2 }}>
-                <TextInput
-                  label="Fokus"
-                  value={draft.supernatural.focus}
-                  onChange={(e) => setDraft({ ...draft, supernatural: { ...draft.supernatural, focus: e.currentTarget.value } })}
-                />
-                <TextInput
-                  label="Regenerationsritual"
-                  value={draft.supernatural.regenerationRitual}
-                  onChange={(e) => setDraft({ ...draft, supernatural: { ...draft.supernatural, regenerationRitual: e.currentTarget.value } })}
-                />
-                <Textarea
-                  label="Aspekte"
-                  value={draft.supernatural.aspects.join("\n")}
-                  onChange={(e) => setDraft({ ...draft, supernatural: { ...draft.supernatural, aspects: e.currentTarget.value.split("\n") } })}
-                />
-                <Textarea
-                  label="Zauber"
-                  value={draft.supernatural.spells.join("\n")}
-                  onChange={(e) => setDraft({ ...draft, supernatural: { ...draft.supernatural, spells: e.currentTarget.value.split("\n") } })}
-                />
-              </SimpleGrid>
-            ) : (
               <Stack>
+                <SimpleGrid cols={{ base: 1, md: 2 }}>
+                  <TextInput
+                    label="Fokus"
+                    value={draft.supernatural.focus}
+                    onChange={(e) => setDraft({ ...draft, supernatural: { ...draft.supernatural, focus: e.currentTarget.value } })}
+                  />
+                  <TextInput
+                    label="Regenerationsritual"
+                    value={draft.supernatural.regenerationRitual}
+                    onChange={(e) => setDraft({ ...draft, supernatural: { ...draft.supernatural, regenerationRitual: e.currentTarget.value } })}
+                  />
+                  <Textarea
+                    label="Aspekte"
+                    value={draft.supernatural.aspects.join("\n")}
+                    onChange={(e) => setDraft({ ...draft, supernatural: { ...draft.supernatural, aspects: e.currentTarget.value.split("\n") } })}
+                  />
+                  <Textarea
+                    label="Zauber"
+                    value={draft.supernatural.spells.join("\n")}
+                    onChange={(e) => setDraft({ ...draft, supernatural: { ...draft.supernatural, spells: e.currentTarget.value.split("\n") } })}
+                  />
+                </SimpleGrid>
+                <SaveButton saving={saving} onSave={save} />
+              </Stack>
+            ) : (
+              <Stack gap="xs">
                 <SimpleGrid cols={{ base: 1, md: 2 }}>
                   <Read label="Fokus" value={draft.supernatural.focus || "-"} />
                   <Read label="Regenerationsritual" value={draft.supernatural.regenerationRitual || "-"} />
                   <Read label="Aspekte" value={draft.supernatural.aspects.filter(Boolean).join(", ") || "-"} />
                   <Read label="Zauber" value={draft.supernatural.spells.filter(Boolean).join(", ") || "-"} />
                 </SimpleGrid>
-                {showRules && (
-                  <Stack gap="xs">
-                    <RuleHelp>
-                      <RuleLine label="Begabte" value={`Magie ist möglich ab ${attributeLabels.gift} 1.`} />
-                      <RuleLine label="Aspekte" value="Gabe 1 erlaubt einen Aspekt, Gabe 2+ erlaubt zwei Aspekte." />
-                      <RuleLine label="Zauber" value="Neue Charaktere beherrschen Gabe + 2 Zauber, maximal 5." />
-                      <RuleLine label="Zauberprobe" value="Gewürfelt wird auf Gabe; Wirkstufen verändern Zielwert, Arkana und Zauberstärke." />
-                    </RuleHelp>
-                    {aspectRules.length > 0 && (
-                      <SimpleGrid cols={{ base: 1, md: 2 }}>
-                        {aspectRules.map((rule) => (
-                          <MagicAspectRuleCard key={rule.name} rule={rule} />
-                        ))}
-                      </SimpleGrid>
-                    )}
+                {selectedSpellRules.length > 0 && (
+                  <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md" mt="sm">
                     {selectedSpellRules.map((rule) => (
                       <SpellRuleSummary key={`${rule.aspect}-${rule.name}`} rule={rule} />
                     ))}
-                  </Stack>
+                  </SimpleGrid>
                 )}
               </Stack>
             )}
@@ -639,15 +738,32 @@ function RuleMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SectionTitle({ title, onEdit }: { title: string; onEdit: () => void }) {
+function SectionTitle({ title, onEdit, onInfo }: { title: string; onEdit: () => void; onInfo: () => void }) {
   return (
     <Group className="sheet-section-header" justify="space-between" mb="md">
       <Title order={2} size="h3" className="display-font">
         {title}
       </Title>
-      <button className="tiny-edit" type="button" onClick={onEdit}>
-        bearbeiten
-      </button>
+      <Group gap={6}>
+        <Tooltip label="Beschreibung und Regeln">
+          <ActionIcon className="section-info" variant="subtle" size="sm" aria-label={`Beschreibung und Regeln: ${title}`} onClick={onInfo}>
+            i
+          </ActionIcon>
+        </Tooltip>
+        <button className="tiny-edit" type="button" onClick={onEdit}>
+          bearbeiten
+        </button>
+      </Group>
+    </Group>
+  );
+}
+
+function SaveButton({ saving, onSave }: { saving: boolean; onSave: () => void }) {
+  return (
+    <Group justify="end">
+      <Button color="red.9" loading={saving} onClick={onSave}>
+        Speichern
+      </Button>
     </Group>
   );
 }

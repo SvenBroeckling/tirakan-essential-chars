@@ -172,6 +172,43 @@ a {
   text-transform: uppercase;
 }
 
+.page-brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  color: #fff8ea;
+}
+
+.page-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(240, 227, 204, 0.32);
+  border-radius: 4px;
+  background:
+    linear-gradient(180deg, rgba(155, 47, 32, 0.95), rgba(58, 19, 13, 0.96)),
+    rgba(22, 21, 20, 0.52);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 248, 234, 0.12),
+    0 10px 28px rgba(0, 0, 0, 0.28);
+  color: #fff8ea;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.page-brand-text {
+  display: grid;
+  gap: 0;
+  color: #eadcc5;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
 .sheet-section-header {
   margin: -6px -6px 16px;
   padding: 8px 12px;
@@ -186,6 +223,19 @@ a {
 
 .sheet-section-header .mantine-Title-root {
   color: #fff8ea;
+}
+
+.section-info {
+  color: #fff8ea !important;
+  border: 1px solid rgba(255, 248, 234, 0.24);
+  border-radius: 999px;
+  background: rgba(22, 21, 20, 0.18);
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+}
+
+.section-info:hover {
+  background: rgba(255, 248, 234, 0.12);
 }
 
 .distribution-rules .mantine-Text-root {
@@ -417,12 +467,6 @@ a {
   border-color: rgba(105, 48, 31, 0.18);
 }
 
-.page-header .mantine-Switch-label {
-  color: #eadcc5;
-  font-family: Georgia, "Times New Roman", serif;
-  font-weight: 700;
-}
-
 .wizard-progress {
   padding-top: 18px !important;
   padding-bottom: 18px !important;
@@ -557,6 +601,22 @@ a {
 
 .download-link .mantine-Text-root {
   overflow-wrap: anywhere;
+}
+
+.app-footer {
+  background: #000;
+}
+
+.footer-contact {
+  height: auto;
+  padding: 0 2px;
+  color: #c9b797;
+  vertical-align: baseline;
+}
+
+.footer-contact:hover {
+  color: #fff8ea;
+  background: transparent;
 }
 
 .mantine-Stepper-stepIcon {
