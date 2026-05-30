@@ -28,8 +28,6 @@ export const weaponRules = [
   { name: "Bogen", damage: "2", range: "nah/fern", grip: "0", properties: "Zweihändig, Nachladen 1" },
   { name: "Armbrust", damage: "3", range: "nah/fern", grip: "-10", properties: "Zweihändig, Nachladen 2" },
   { name: "Schleuder", damage: "1", range: "nah/fern", grip: "0", properties: "Nachladen 1" },
-  { name: "Pistole", damage: "2", range: "nah/fern", grip: "0", properties: "Nachladen 2, Laut" },
-  { name: "Muskete", damage: "3", range: "fern/weit", grip: "-10", properties: "Zweihändig, Nachladen 2, Laut" },
 ] satisfies WeaponRule[];
 
 export const armorRules = [
