@@ -2,6 +2,7 @@
 
 import {
   ActionIcon,
+  Autocomplete,
   Badge,
   Button,
   Container,
@@ -9,6 +10,7 @@ import {
   Modal,
   NumberInput,
   Paper,
+  Select,
   SimpleGrid,
   Stack,
   Text,
@@ -23,7 +25,16 @@ import { AttributeRow, attributeTargetRolls, sheetRankValues, SkillRankRow } fro
 import { armorRules, ArmorRule, weaponRules, WeaponRule } from "@/lib/equipmentRules";
 import { magicAspectRules, SpellRule, spellRules } from "@/lib/magicRules";
 import { ancestryRules, bondRules, MarkRule, pathRules } from "@/lib/markRules";
-import { attributeLabels, attributes, centuryLevels, deriveValues, normalizeAttributes } from "@/lib/rulebook";
+import {
+  ancestries,
+  attributeLabels,
+  attributes,
+  bonds,
+  centuryLevels,
+  deriveValues,
+  normalizeAttributes,
+  paths,
+} from "@/lib/rulebook";
 
 type CharacterView = {
   hash: string;
@@ -71,6 +82,30 @@ type CharacterView = {
   favorMax: number;
 };
 
+const skillRankOptions = ["1", "2", "3"];
+
+function pathSkillOptions(pathName: string) {
+  const skills = pathRules.find((rule) => rule.name === pathName)?.skills;
+  if (!skills) return [];
+
+  return Array.from(new Set(skills.split(",").map((skill) => skill.trim()).filter(Boolean)));
+}
+
+function magicSlots(gift: number) {
+  return {
+    aspects: gift <= 0 ? 0 : gift === 1 ? 1 : 2,
+    spells: gift <= 0 ? 0 : Math.min(gift + 2, 5),
+  };
+}
+
+function resizeValues(values: string[], size: number) {
+  return Array.from({ length: size }, (_, index) => values[index] ?? "");
+}
+
+function selectOptionsWithCurrent(value: string, options: readonly string[]) {
+  return value && !options.includes(value) ? [value, ...options] : [...options];
+}
+
 export function CharacterDetail({ character }: { character: CharacterView }) {
   const [draft, setDraft] = useState({ ...character, attributes: normalizeAttributes(character.attributes) });
   const [editing, setEditing] = useState<string | null>(null);
@@ -99,19 +134,59 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
     skills: draft.skills,
   });
 
-  const save = async () => {
+  const conditionRows = [
+    { key: "wounds", label: "Wunden", value: draft.conditions.wounds ?? 0, max: derived.woundThreshold },
+    { key: "burden", label: "Bürde", value: draft.conditions.burden ?? 0, max: derived.burdenThreshold },
+    { key: "omen", label: "Omen", value: draft.conditions.omen ?? derived.omenMax, max: derived.omenMax },
+    { key: "arkana", label: "Arkana", value: draft.conditions.arkana ?? derived.arkanaMax, max: derived.arkanaMax },
+    { key: "favor", label: "Gunst", value: draft.conditions.favor ?? derived.favorMax, max: derived.favorMax },
+    {
+      key: "corruption",
+      label: "Verderbnis",
+      value: draft.conditions.corruption ?? 0,
+      max: Math.max(6, draft.conditions.corruption ?? 0),
+    },
+  ];
+  const selectedPathSkillOptions = pathSkillOptions(draft.path);
+  const weaponOptions = weaponRules.map((rule) => rule.name);
+  const armorOptions = armorRules.map((rule) => rule.name);
+  const aspectOptions = magicAspectRules.map((rule) => rule.name);
+  const slots = magicSlots(draft.attributes.gift ?? 0);
+  const aspectValues = resizeValues(draft.supernatural.aspects, Math.max(slots.aspects, draft.supernatural.aspects.length));
+  const spellValues = resizeValues(draft.supernatural.spells, Math.max(slots.spells, draft.supernatural.spells.length));
+  const spellOptions = (
+    aspectValues.filter(Boolean).length
+      ? spellRules.filter((rule) => aspectValues.includes(rule.aspect))
+      : spellRules
+  ).map((rule) => rule.name);
+
+  const save = async (nextDraft = draft, closeEditing = true) => {
     setSaving(true);
-    const response = await fetch(`/api/characters/${draft.hash}`, {
+    const response = await fetch(`/api/characters/${nextDraft.hash}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(draft),
+      body: JSON.stringify(nextDraft),
     });
     const updated = await response.json();
     setSaving(false);
     if (response.ok) {
       setDraft(JSON.parse(JSON.stringify(updated)));
-      setEditing(null);
+      if (closeEditing) {
+        setEditing(null);
+      }
     }
+  };
+
+  const saveCondition = (key: string, value: number) => {
+    const nextDraft = {
+      ...draft,
+      conditions: {
+        ...draft.conditions,
+        [key]: value,
+      },
+    };
+    setDraft(nextDraft);
+    void save(nextDraft, false);
   };
 
   const copyHash = async () => {
@@ -218,7 +293,7 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
             )}
           </Paper>
 
-          <SimpleGrid cols={{ base: 1, md: 3 }}>
+          <div className="character-summary-grid">
             <Paper className="book-panel" p="lg">
               <SectionTitle
                 title="Prägungen"
@@ -238,9 +313,27 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
               />
               {editing === "marks" ? (
                 <Stack>
-                  <TextInput label="Abstammung" value={draft.ancestry} onChange={(e) => setDraft({ ...draft, ancestry: e.currentTarget.value, ancestryCustom: true })} />
-                  <TextInput label="Weg" value={draft.path} onChange={(e) => setDraft({ ...draft, path: e.currentTarget.value, pathCustom: true })} />
-                  <TextInput label="Bindung" value={draft.bond} onChange={(e) => setDraft({ ...draft, bond: e.currentTarget.value, bondCustom: true })} />
+                  <Select
+                    label="Abstammung"
+                    data={selectOptionsWithCurrent(draft.ancestry, ancestries)}
+                    value={draft.ancestry || null}
+                    searchable
+                    onChange={(value) => value && setDraft({ ...draft, ancestry: value, ancestryCustom: !ancestries.includes(value) })}
+                  />
+                  <Select
+                    label="Weg"
+                    data={selectOptionsWithCurrent(draft.path, paths)}
+                    value={draft.path || null}
+                    searchable
+                    onChange={(value) => value && setDraft({ ...draft, path: value, pathCustom: !paths.includes(value) })}
+                  />
+                  <Select
+                    label="Bindung"
+                    data={selectOptionsWithCurrent(draft.bond, bonds)}
+                    value={draft.bond || null}
+                    searchable
+                    onChange={(value) => value && setDraft({ ...draft, bond: value, bondCustom: !bonds.includes(value) })}
+                  />
                   <TextInput label="Mal" value={draft.mark} onChange={(e) => setDraft({ ...draft, mark: e.currentTarget.value })} />
                   <SaveButton saving={saving} onSave={save} />
                 </Stack>
@@ -257,7 +350,6 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
             <Paper className="book-panel" p="lg">
               <SectionTitle
                 title="Zustand"
-                onEdit={() => setEditing("conditions")}
                 onInfo={() =>
                   setInfoModal({
                     title: "Zustand",
@@ -273,32 +365,18 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                   })
                 }
               />
-              {editing === "conditions" ? (
-                <Stack>
-                  <SimpleGrid cols={2}>
-                    {Object.entries(draft.conditions).map(([key, value]) => (
-                      <NumberInput
-                        key={key}
-                        label={key}
-                        value={value}
-                        onChange={(next) =>
-                          setDraft({ ...draft, conditions: { ...draft.conditions, [key]: Number(next) || 0 } })
-                        }
-                      />
-                    ))}
-                  </SimpleGrid>
-                  <SaveButton saving={saving} onSave={save} />
-                </Stack>
-              ) : (
-                <SimpleGrid cols={2}>
-                  <Read label="Wunden" value={`${draft.conditions.wounds ?? 0} / ${derived.woundThreshold}`} />
-                  <Read label="Bürde" value={`${draft.conditions.burden ?? 0} / ${derived.burdenThreshold}`} />
-                  <Read label="Omen" value={`${draft.conditions.omen ?? derived.omenMax} / ${derived.omenMax}`} />
-                  <Read label="Arkana" value={`${draft.conditions.arkana ?? derived.arkanaMax} / ${derived.arkanaMax}`} />
-                  <Read label="Gunst" value={`${draft.conditions.favor ?? derived.favorMax} / ${derived.favorMax}`} />
-                  <Read label="Verderbnis" value={String(draft.conditions.corruption ?? 0)} />
-                </SimpleGrid>
-              )}
+              <Stack gap="xs">
+                {conditionRows.map((condition) => (
+                  <ConditionRow
+                    key={condition.key}
+                    label={condition.label}
+                    value={condition.value}
+                    max={condition.max}
+                    disabled={saving}
+                    onChange={(value) => saveCondition(condition.key, value)}
+                  />
+                ))}
+              </Stack>
             </Paper>
 
             <Paper className="book-panel" p="lg">
@@ -331,7 +409,7 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                 <Read label="Gunstgrenze" value={String(derived.favorLimit)} />
               </SimpleGrid>
             </Paper>
-          </SimpleGrid>
+          </div>
 
           <Paper className="book-panel" p="lg">
             <SectionTitle
@@ -396,28 +474,28 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
               <Stack>
                 {draft.skills.map((skill, index) =>
                   editing === "skills" ? (
-                    <Group key={index} grow align="end">
-                      <TextInput
+                    <div key={index} className="skill-row">
+                      <Autocomplete
                         label="Name"
+                        data={selectOptionsWithCurrent(skill.name, selectedPathSkillOptions)}
                         value={skill.name}
-                        onChange={(e) => {
+                        onChange={(value) => {
                           const skills = [...draft.skills];
-                          skills[index] = { ...skill, name: e.currentTarget.value };
+                          skills[index] = { ...skill, name: value };
                           setDraft({ ...draft, skills });
                         }}
                       />
-                      <NumberInput
+                      <Select
                         label="Rang"
-                        min={0}
-                        max={4}
-                        value={skill.rank}
+                        data={selectOptionsWithCurrent(String(skill.rank), skillRankOptions)}
+                        value={String(skill.rank)}
                         onChange={(value) => {
                           const skills = [...draft.skills];
                           skills[index] = { ...skill, rank: Number(value) || 0 };
                           setDraft({ ...draft, skills });
                         }}
                       />
-                    </Group>
+                    </div>
                   ) : (
                     <SkillRankRow key={index} name={skill.name} value={skill.rank} />
                   ),
@@ -444,20 +522,26 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
               />
               {editing === "equipment" ? (
                 <Stack>
-                  <TextInput
+                  <Select
                     label="Primärwaffe"
-                    value={draft.equipment.primaryWeapon}
-                    onChange={(e) => setDraft({ ...draft, equipment: { ...draft.equipment, primaryWeapon: e.currentTarget.value } })}
+                    data={selectOptionsWithCurrent(draft.equipment.primaryWeapon, weaponOptions)}
+                    value={draft.equipment.primaryWeapon || null}
+                    searchable
+                    onChange={(value) => value && setDraft({ ...draft, equipment: { ...draft.equipment, primaryWeapon: value } })}
                   />
-                  <TextInput
+                  <Select
                     label="Zweitwaffe"
-                    value={draft.equipment.secondaryWeapon}
-                    onChange={(e) => setDraft({ ...draft, equipment: { ...draft.equipment, secondaryWeapon: e.currentTarget.value } })}
+                    data={selectOptionsWithCurrent(draft.equipment.secondaryWeapon, weaponOptions)}
+                    value={draft.equipment.secondaryWeapon || null}
+                    searchable
+                    onChange={(value) => value && setDraft({ ...draft, equipment: { ...draft.equipment, secondaryWeapon: value } })}
                   />
-                  <TextInput
+                  <Select
                     label="Rüstung"
-                    value={draft.equipment.armor}
-                    onChange={(e) => setDraft({ ...draft, equipment: { ...draft.equipment, armor: e.currentTarget.value } })}
+                    data={selectOptionsWithCurrent(draft.equipment.armor, armorOptions)}
+                    value={draft.equipment.armor || null}
+                    searchable
+                    onChange={(value) => value && setDraft({ ...draft, equipment: { ...draft.equipment, armor: value } })}
                   />
                   <Textarea
                     label="Gegenstände"
@@ -524,16 +608,49 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                     value={draft.supernatural.regenerationRitual}
                     onChange={(e) => setDraft({ ...draft, supernatural: { ...draft.supernatural, regenerationRitual: e.currentTarget.value } })}
                   />
-                  <Textarea
-                    label="Aspekte"
-                    value={draft.supernatural.aspects.join("\n")}
-                    onChange={(e) => setDraft({ ...draft, supernatural: { ...draft.supernatural, aspects: e.currentTarget.value.split("\n") } })}
-                  />
-                  <Textarea
-                    label="Zauber"
-                    value={draft.supernatural.spells.join("\n")}
-                    onChange={(e) => setDraft({ ...draft, supernatural: { ...draft.supernatural, spells: e.currentTarget.value.split("\n") } })}
-                  />
+                  {aspectValues.map((aspect, index) => (
+                    <Select
+                      key={`aspect-${index}`}
+                      label={`Aspekt ${index + 1}`}
+                      data={selectOptionsWithCurrent(aspect, aspectOptions)}
+                      value={aspect || null}
+                      searchable
+                      clearable
+                      onChange={(value) => {
+                        const aspects = [...aspectValues];
+                        aspects[index] = value ?? "";
+                        const allowedSpellNames = new Set(
+                          spellRules.filter((rule) => aspects.includes(rule.aspect)).map((rule) => rule.name),
+                        );
+                        setDraft({
+                          ...draft,
+                          supernatural: {
+                            ...draft.supernatural,
+                            aspects: aspects.filter(Boolean),
+                            spells: spellValues.filter((spell) => allowedSpellNames.has(spell)),
+                          },
+                        });
+                      }}
+                    />
+                  ))}
+                  {spellValues.map((spell, index) => (
+                    <Select
+                      key={`spell-${index}`}
+                      label={`Zauber ${index + 1}`}
+                      data={selectOptionsWithCurrent(spell, spellOptions)}
+                      value={spell || null}
+                      searchable
+                      clearable
+                      onChange={(value) => {
+                        const spells = [...spellValues];
+                        spells[index] = value ?? "";
+                        setDraft({
+                          ...draft,
+                          supernatural: { ...draft.supernatural, spells: spells.filter(Boolean) },
+                        });
+                      }}
+                    />
+                  ))}
                 </SimpleGrid>
                 <SaveButton saving={saving} onSave={save} />
               </Stack>
@@ -738,7 +855,53 @@ function RuleMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SectionTitle({ title, onEdit, onInfo }: { title: string; onEdit: () => void; onInfo: () => void }) {
+function ConditionRow({
+  label,
+  value,
+  max,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+}) {
+  const safeValue = Math.max(0, value);
+  const safeMax = Math.max(0, max, safeValue);
+  const options = Array.from({ length: safeMax + 1 }, (_, index) => index);
+
+  return (
+    <div className="condition-row">
+      <div className="rank-label">
+        <Text fw={700}>{label}</Text>
+      </div>
+      <Group gap={6} wrap="wrap" className="rank-circles condition-circles">
+        {options.map((option) => {
+          const current = option === safeValue;
+
+          return (
+            <button
+              key={option}
+              type="button"
+              className="rank-circle condition-circle"
+              data-selected={current}
+              disabled={disabled}
+              onClick={() => onChange(option)}
+              aria-pressed={current}
+              aria-label={`${label} auf ${option} setzen`}
+            >
+              {option}
+            </button>
+          );
+        })}
+      </Group>
+    </div>
+  );
+}
+
+function SectionTitle({ title, onEdit, onInfo }: { title: string; onEdit?: () => void; onInfo: () => void }) {
   return (
     <Group className="sheet-section-header" justify="space-between" mb="md">
       <Title order={2} size="h3" className="display-font">
@@ -750,9 +913,11 @@ function SectionTitle({ title, onEdit, onInfo }: { title: string; onEdit: () => 
             i
           </ActionIcon>
         </Tooltip>
-        <button className="tiny-edit" type="button" onClick={onEdit}>
-          bearbeiten
-        </button>
+        {onEdit ? (
+          <button className="tiny-edit" type="button" onClick={onEdit}>
+            bearbeiten
+          </button>
+        ) : null}
       </Group>
     </Group>
   );
