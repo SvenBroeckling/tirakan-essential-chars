@@ -3,6 +3,32 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { deriveValues, normalizeAttributes } from "@/lib/rulebook";
 
+const publicApiHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, PATCH, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+function toPublicCharacter<T extends { id: string }>(character: T) {
+  const { id: _id, ...publicCharacter } = character;
+  return publicCharacter;
+}
+
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: publicApiHeaders });
+}
+
+export async function GET(_request: Request, { params }: { params: Promise<{ hash: string }> }) {
+  const { hash } = await params;
+  const character = await prisma.character.findUnique({ where: { hash } });
+
+  if (!character) {
+    return NextResponse.json({ error: "Nicht gefunden" }, { status: 404, headers: publicApiHeaders });
+  }
+
+  return NextResponse.json(toPublicCharacter(character), { headers: publicApiHeaders });
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ hash: string }> }) {
   const { hash } = await params;
   const body = await request.json();
