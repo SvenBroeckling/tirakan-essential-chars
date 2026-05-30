@@ -578,8 +578,8 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
                         <RuleLine label="Begabte" value={`Magie ist möglich ab ${attributeLabels.gift} 1.`} />
                         <RuleLine label="Aspekte" value="Gabe 1 erlaubt einen Aspekt, Gabe 2+ erlaubt zwei Aspekte." />
                         <RuleLine label="Zauber" value="Neue Charaktere beherrschen Gabe + 2 Zauber, maximal 5." />
-                        <RuleLine label="Zauberprobe" value="Gewürfelt wird auf Gabe; Wirkstufen verändern Zielwert, Arkana und Zauberstärke." />
                       </RuleHelp>
+                      <SpellCastingRules />
                       {aspectRules.length > 0 && (
                         <SimpleGrid cols={{ base: 1, md: 2 }}>
                           {aspectRules.map((rule) => (
@@ -820,6 +820,26 @@ function SpellRuleSummary({ rule }: { rule: SpellRule }) {
         <Text size="sm">{rule.description}</Text>
       </Stack>
     </Paper>
+  );
+}
+
+function SpellCastingRules() {
+  return (
+    <RuleHelp>
+      <RuleLine label="Ablauf" value="Der Zauber gibt vor, ob er ein Ritual oder ein einfacher Zauber ist. Einfache Zauber können in einer Kampfhandlung gewirkt werden, Rituale brauchen in der Regel mehr als eine Handlung." />
+      <RuleLine label="Probe" value="Nach Wahl der Wirkstufe wird mit eventuellen Modifikationen auf Gabe geworfen. Die Kosten werden immer bezahlt, auch wenn der Zauber fehlschlägt." />
+      <SimpleGrid cols={{ base: 1, sm: 2 }}>
+        <RuleMetric label="Gering" value="+10 Zielwert, Zauberstärke 0" />
+        <RuleMetric label="Normal" value="keine Auswirkungen, Zauberstärke 1" />
+        <RuleMetric label="Schwer" value="-10 Zielwert, +1 Arkana, Zauberstärke 3" />
+        <RuleMetric label="Katastrophal" value="-30 Zielwert, +2 Arkana, Zauberstärke 5" />
+      </SimpleGrid>
+      <RuleLine label="Kritischer Erfolg" value="+2 Zauberstärke" />
+      <RuleLine label="Starker Erfolg" value="+1 Zauberstärke" />
+      <RuleLine label="Sauberer Erfolg" value="Effekt tritt wie erklärt ein." />
+      <RuleLine label="Knapp geschafft" value="Effekt tritt ein, aber mit einem geringen Nebeneffekt." />
+      <RuleLine label="Misserfolg" value="Kein beabsichtigter Effekt, stattdessen Nebeneffekt." />
+    </RuleHelp>
   );
 }
 
