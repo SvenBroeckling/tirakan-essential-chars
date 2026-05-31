@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { createCharacterHash } from "@/lib/hash";
+import { sendCharacterCreatedMail } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
 import { CharacterPayload, deriveValues, normalizeAttributes } from "@/lib/rulebook";
+
+export const runtime = "nodejs";
 
 function normalizePayload(body: Partial<CharacterPayload>): CharacterPayload {
   const attributes = normalizeAttributes(body.attributes);
@@ -45,6 +48,7 @@ function normalizePayload(body: Partial<CharacterPayload>): CharacterPayload {
 export async function POST(request: Request) {
   const payload = normalizePayload(await request.json());
   const derived = deriveValues(payload);
+  const origin = new URL(request.url).origin;
   let hash = createCharacterHash();
 
   for (let attempts = 0; attempts < 4; attempts += 1) {
@@ -67,6 +71,10 @@ export async function POST(request: Request) {
           },
           ...derived,
         },
+      });
+
+      await sendCharacterCreatedMail(character, origin).catch((error) => {
+        console.error("Character created mail could not be sent", error);
       });
 
       return NextResponse.json({ hash: character.hash });

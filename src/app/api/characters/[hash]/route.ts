@@ -9,8 +9,8 @@ const publicApiHeaders = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-function toPublicCharacter<T extends { id: string }>(character: T) {
-  const { id: _id, ...publicCharacter } = character;
+function toPublicCharacter<T extends { id: string; portraitStoragePath?: string | null }>(character: T) {
+  const { id: _id, portraitStoragePath: _portraitStoragePath, ...publicCharacter } = character;
   return publicCharacter;
 }
 
@@ -32,15 +32,27 @@ export async function GET(_request: Request, { params }: { params: Promise<{ has
 export async function PATCH(request: Request, { params }: { params: Promise<{ hash: string }> }) {
   const { hash } = await params;
   const body = await request.json();
+  const {
+    id: _id,
+    hash: _hash,
+    portraitStoragePath: _portraitStoragePath,
+    portraitOriginalName: _portraitOriginalName,
+    portraitMimeType: _portraitMimeType,
+    portraitSize: _portraitSize,
+    portraitUpdatedAt: _portraitUpdatedAt,
+    createdAt: _createdAt,
+    updatedAt: _updatedAt,
+    ...patchBody
+  } = body;
   const current = await prisma.character.findUnique({ where: { hash } });
 
   if (!current) {
     return NextResponse.json({ error: "Nicht gefunden" }, { status: 404 });
   }
 
-  const nextAttributes = normalizeAttributes((body.attributes ?? current.attributes) as Record<string, number>);
-  const nextSkills = (body.skills ?? current.skills) as Array<{ name: string; rank: number }>;
-  const nextCentury = Number(body.century ?? current.century);
+  const nextAttributes = normalizeAttributes((patchBody.attributes ?? current.attributes) as Record<string, number>);
+  const nextSkills = (patchBody.skills ?? current.skills) as Array<{ name: string; rank: number }>;
+  const nextCentury = Number(patchBody.century ?? current.century);
   const derived = deriveValues({
     attributes: nextAttributes as never,
     century: nextCentury,
@@ -50,16 +62,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ha
   const character = await prisma.character.update({
     where: { hash },
     data: {
-      ...body,
+      ...patchBody,
       century: nextCentury,
       attributes: nextAttributes as Prisma.InputJsonValue,
       skills: nextSkills as Prisma.InputJsonValue,
-      equipment: (body.equipment ?? current.equipment) as Prisma.InputJsonValue,
-      supernatural: (body.supernatural ?? current.supernatural) as Prisma.InputJsonValue,
-      conditions: (body.conditions ?? current.conditions) as Prisma.InputJsonValue,
+      equipment: (patchBody.equipment ?? current.equipment) as Prisma.InputJsonValue,
+      supernatural: (patchBody.supernatural ?? current.supernatural) as Prisma.InputJsonValue,
+      conditions: (patchBody.conditions ?? current.conditions) as Prisma.InputJsonValue,
       ...derived,
     },
   });
 
-  return NextResponse.json(character);
+  return NextResponse.json(toPublicCharacter(character));
 }

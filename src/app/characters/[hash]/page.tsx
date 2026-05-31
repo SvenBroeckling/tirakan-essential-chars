@@ -27,5 +27,7 @@ export default async function CharacterPage({ params }: CharacterPageProps) {
     notFound();
   }
 
-  return <CharacterDetail character={JSON.parse(JSON.stringify(character))} />;
+  const { id: _id, portraitStoragePath: _portraitStoragePath, ...publicCharacter } = character;
+
+  return <CharacterDetail character={JSON.parse(JSON.stringify(publicCharacter))} />;
 }

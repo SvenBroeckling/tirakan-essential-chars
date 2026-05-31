@@ -8,38 +8,43 @@ datasource db {
 }
 
 model Character {
-  id                  String   @id @default(cuid())
-  hash                String   @unique
-  name                String
-  birthDate           String?
-  century             Int
-  campaign            String?
-  playerName          String?
-  concept             String
-  ancestry            String
-  ancestryCustom      Boolean  @default(false)
-  path                String
-  pathCustom          Boolean  @default(false)
-  bond                String
-  bondCustom          Boolean  @default(false)
-  oathOrDebt          String?
-  mark                String   @default("keins")
-  attributes          Json
-  skills              Json
-  equipment           Json
-  supernatural        Json
-  conditions          Json
-  notes               String?
-  woundThreshold      Int
-  burdenThreshold     Int
-  initiative          Int
-  faithLevel          Int
-  magicLevel          Int
-  omenMax             Int
-  invocationValue     Int
-  favorLimit          Int
-  arkanaMax           Int
-  favorMax            Int
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                   String    @id @default(cuid())
+  hash                 String    @unique
+  name                 String
+  birthDate            String?
+  century              Int
+  campaign             String?
+  playerName           String?
+  concept              String
+  ancestry             String
+  ancestryCustom       Boolean   @default(false)
+  path                 String
+  pathCustom           Boolean   @default(false)
+  bond                 String
+  bondCustom           Boolean   @default(false)
+  oathOrDebt           String?
+  mark                 String    @default("keins")
+  attributes           Json
+  skills               Json
+  equipment            Json
+  supernatural         Json
+  conditions           Json
+  notes                String?
+  portraitStoragePath  String?
+  portraitOriginalName String?
+  portraitMimeType     String?
+  portraitSize         Int?
+  portraitUpdatedAt    DateTime?
+  woundThreshold       Int
+  burdenThreshold      Int
+  initiative           Int
+  faithLevel           Int
+  magicLevel           Int
+  omenMax              Int
+  invocationValue      Int
+  favorLimit           Int
+  arkanaMax            Int
+  favorMax             Int
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 }

@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Container,
+  FileButton,
   Group,
   Modal,
   NumberInput,
@@ -20,7 +21,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import Link from "next/link";
-import { ReactNode, useState } from "react";
+import { ReactNode, useRef, useState } from "react";
 import { AttributeRow, attributeTargetRolls, sheetRankValues, SkillRankRow } from "@/components/AttributeRows";
 import { armorRules, ArmorRule, weaponRules, WeaponRule } from "@/lib/equipmentRules";
 import { magicAspectRules, SpellRule, spellRules } from "@/lib/magicRules";
@@ -80,6 +81,11 @@ type CharacterView = {
   favorLimit: number;
   arkanaMax: number;
   favorMax: number;
+  portraitOriginalName: string | null;
+  portraitMimeType: string | null;
+  portraitSize: number | null;
+  portraitUpdatedAt: string | null;
+  updatedAt: string;
 };
 
 const skillRankOptions = ["1", "2", "3"];
@@ -110,6 +116,9 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
   const [draft, setDraft] = useState({ ...character, attributes: normalizeAttributes(character.attributes) });
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [portraitUploading, setPortraitUploading] = useState(false);
+  const [portraitError, setPortraitError] = useState<string | null>(null);
+  const portraitResetRef = useRef<() => void>(null);
   const [infoModal, setInfoModal] = useState<{ title: string; content: ReactNode } | null>(null);
   const primaryWeapon =
     weaponRules.find((rule) => rule.name === draft.equipment.primaryWeapon) ??
@@ -159,6 +168,9 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
       ? spellRules.filter((rule) => aspectValues.includes(rule.aspect))
       : spellRules
   ).map((rule) => rule.name);
+  const portraitUrl = draft.portraitMimeType
+    ? `/api/characters/${draft.hash}/portrait?v=${encodeURIComponent(draft.portraitUpdatedAt ?? draft.updatedAt)}`
+    : null;
 
   const save = async (nextDraft = draft, closeEditing = true) => {
     setSaving(true);
@@ -191,6 +203,39 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
 
   const copyHash = async () => {
     await navigator.clipboard.writeText(draft.hash);
+  };
+
+  const uploadPortrait = async (file: File | null) => {
+    if (!file) return;
+
+    setPortraitUploading(true);
+    setPortraitError(null);
+
+    const formData = new FormData();
+    formData.set("portrait", file);
+
+    const response = await fetch(`/api/characters/${draft.hash}/portrait`, {
+      method: "POST",
+      body: formData,
+    });
+    const result = await response.json();
+
+    setPortraitUploading(false);
+    portraitResetRef.current?.();
+
+    if (!response.ok) {
+      setPortraitError(result.error ?? "Portrait konnte nicht gespeichert werden.");
+      return;
+    }
+
+    setDraft({
+      ...draft,
+      portraitOriginalName: result.portraitOriginalName,
+      portraitMimeType: result.portraitMimeType,
+      portraitSize: result.portraitSize,
+      portraitUpdatedAt: result.portraitUpdatedAt,
+      updatedAt: result.updatedAt,
+    });
   };
 
   return (
@@ -230,68 +275,127 @@ export function CharacterDetail({ character }: { character: CharacterView }) {
             </Link>
           </Group>
 
-          <Paper className="book-panel" p="lg">
-            <SectionTitle
-              title="Identität"
-              onEdit={() => setEditing("identity")}
-              onInfo={() =>
-                setInfoModal({
-                  title: "Identität",
-                  content: (
-                    <RuleHelp>
-                      <RuleLine label="Konzept" value="Der Konzeptsatz beschreibt die Figur knapp und spielbar." />
-                      <RuleLine label="Jahrhundert" value="Das Jahrhundert bestimmt Glaubens- und Magieniveau." />
-                      <RuleLine label="Hash" value="Wer den Hash kennt, kann diesen Charakterbogen öffnen." />
-                    </RuleHelp>
-                  ),
-                })
-              }
-            />
-            {editing === "identity" ? (
-              <Stack>
-                <SimpleGrid cols={{ base: 1, md: 2 }}>
-                  <TextInput label="Name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.currentTarget.value })} />
-                  <TextInput
-                    label="Geburtsdatum"
-                    value={draft.birthDate ?? ""}
-                    onChange={(e) => setDraft({ ...draft, birthDate: e.currentTarget.value })}
-                  />
-                  <NumberInput
-                    label="Jahrhundert"
-                    min={1}
-                    max={10}
-                    value={draft.century}
-                    onChange={(value) => setDraft({ ...draft, century: Number(value) || 1 })}
-                  />
-                  <TextInput
-                    label="Kampagne"
-                    value={draft.campaign ?? ""}
-                    onChange={(e) => setDraft({ ...draft, campaign: e.currentTarget.value })}
-                  />
-                  <Textarea
-                    label="Konzeptsatz"
-                    value={draft.concept}
-                    onChange={(e) => setDraft({ ...draft, concept: e.currentTarget.value })}
-                  />
-                  <Textarea
-                    label="Schuld oder Eid"
-                    value={draft.oathOrDebt ?? ""}
-                    onChange={(e) => setDraft({ ...draft, oathOrDebt: e.currentTarget.value })}
-                  />
-                </SimpleGrid>
-                <SaveButton saving={saving} onSave={save} />
+          <div className="character-lead-grid">
+            <Paper className="book-panel portrait-panel" p="lg">
+              <SectionTitle
+                title="Portrait"
+                onInfo={() =>
+                  setInfoModal({
+                    title: "Portrait",
+                    content: (
+                      <RuleHelp>
+                        <RuleLine label="Dateien" value="Erlaubt sind JPEG, PNG und WebP bis maximal 3 MB." />
+                        <RuleLine label="Speicherung" value="Das Portrait wird lokal auf diesem Server gespeichert." />
+                      </RuleHelp>
+                    ),
+                  })
+                }
+              />
+              <Stack gap="sm">
+                <div className="portrait-frame" data-empty={portraitUrl ? "false" : "true"}>
+                  {portraitUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={portraitUrl} alt={`Portrait von ${draft.name}`} />
+                  ) : (
+                    <div className="portrait-silhouette" aria-label="Kein Portrait hinterlegt">
+                      <span />
+                    </div>
+                  )}
+                  <FileButton
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={uploadPortrait}
+                    resetRef={portraitResetRef}
+                  >
+                    {(props) => (
+                      <Tooltip label="Portrait hochladen">
+                        <ActionIcon
+                          {...props}
+                          className="portrait-upload-button"
+                          variant="filled"
+                          size="lg"
+                          loading={portraitUploading}
+                          aria-label="Portrait hochladen"
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 16V5m0 0 4 4m-4-4-4 4" />
+                            <path d="M5 16v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
+                          </svg>
+                        </ActionIcon>
+                      </Tooltip>
+                    )}
+                  </FileButton>
+                </div>
+                {portraitError && (
+                  <Text size="sm" c="red.9">
+                    {portraitError}
+                  </Text>
+                )}
               </Stack>
-            ) : (
-              <SimpleGrid cols={{ base: 1, md: 3 }}>
-                <Read label="Konzept" value={draft.concept} />
-                <Read label="Geburtsdatum" value={draft.birthDate ?? "-"} />
-                <Read label="Jahrhundert" value={String(draft.century)} />
-                <Read label="Kampagne" value={draft.campaign ?? "-"} />
-                <Read label="Spieler/in" value={draft.playerName ?? "-"} />
-                <Read label="Schuld oder Eid" value={draft.oathOrDebt ?? "-"} />
-              </SimpleGrid>
-            )}
-          </Paper>
+            </Paper>
+
+            <Paper className="book-panel" p="lg">
+              <SectionTitle
+                title="Identität"
+                onEdit={() => setEditing("identity")}
+                onInfo={() =>
+                  setInfoModal({
+                    title: "Identität",
+                    content: (
+                      <RuleHelp>
+                        <RuleLine label="Konzept" value="Der Konzeptsatz beschreibt die Figur knapp und spielbar." />
+                        <RuleLine label="Jahrhundert" value="Das Jahrhundert bestimmt Glaubens- und Magieniveau." />
+                        <RuleLine label="Hash" value="Wer den Hash kennt, kann diesen Charakterbogen öffnen." />
+                      </RuleHelp>
+                    ),
+                  })
+                }
+              />
+              {editing === "identity" ? (
+                <Stack>
+                  <SimpleGrid cols={{ base: 1, md: 2 }}>
+                    <TextInput label="Name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.currentTarget.value })} />
+                    <TextInput
+                      label="Geburtsdatum"
+                      value={draft.birthDate ?? ""}
+                      onChange={(e) => setDraft({ ...draft, birthDate: e.currentTarget.value })}
+                    />
+                    <NumberInput
+                      label="Jahrhundert"
+                      min={1}
+                      max={10}
+                      value={draft.century}
+                      onChange={(value) => setDraft({ ...draft, century: Number(value) || 1 })}
+                    />
+                    <TextInput
+                      label="Kampagne"
+                      value={draft.campaign ?? ""}
+                      onChange={(e) => setDraft({ ...draft, campaign: e.currentTarget.value })}
+                    />
+                    <Textarea
+                      label="Konzeptsatz"
+                      value={draft.concept}
+                      onChange={(e) => setDraft({ ...draft, concept: e.currentTarget.value })}
+                    />
+                    <Textarea
+                      label="Schuld oder Eid"
+                      value={draft.oathOrDebt ?? ""}
+                      onChange={(e) => setDraft({ ...draft, oathOrDebt: e.currentTarget.value })}
+                    />
+                  </SimpleGrid>
+                  <SaveButton saving={saving} onSave={save} />
+                </Stack>
+              ) : (
+                <SimpleGrid cols={{ base: 1, md: 3 }}>
+                  <Read label="Konzept" value={draft.concept} />
+                  <Read label="Geburtsdatum" value={draft.birthDate ?? "-"} />
+                  <Read label="Jahrhundert" value={String(draft.century)} />
+                  <Read label="Kampagne" value={draft.campaign ?? "-"} />
+                  <Read label="Spieler/in" value={draft.playerName ?? "-"} />
+                  <Read label="Schuld oder Eid" value={draft.oathOrDebt ?? "-"} />
+                </SimpleGrid>
+              )}
+            </Paper>
+          </div>
 
           <div className="character-summary-grid">
             <Paper className="book-panel" p="lg">
